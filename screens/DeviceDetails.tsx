@@ -1,7 +1,5 @@
-// DeviceDetails.tsx
-import firebase from '@react-native-firebase/app';
-import { NavigationProp, RouteProp, useNavigation } from '@react-navigation/native';
 import * as Location from 'expo-location';
+import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
   Button,
@@ -14,63 +12,33 @@ import {
 } from 'react-native';
 import DropDownPicker from 'react-native-dropdown-picker';
 import { useDispatch } from 'react-redux';
-import AppConstants from "../app/utlis/AppConstants";
+import AppConstants from '../app/utlis/AppConstants';
 import { showToastFail } from '../app/utlis/ToastConfig';
-import { DeviceDetails as DeviceDetailsType, DropdownItem, RouteParams } from '../types/types';
+import { DeviceDetails as DeviceDetailsType, DropdownItem } from '../types/types';
 
-const teamOptions: DropdownItem[] = [
-  { label: 'CSDT1', value: 'CSDT1' },
-  { label: 'CSDT2', value: 'CSDT2' },
-  { label: 'CSDT3', value: 'CSDT3' },
-  { label: 'CSDT4', value: 'CSDT4' },
-  { label: 'CSDT5', value: 'CSDT5' },
-  { label: 'CSDT6', value: 'CSDT6' },
-  { label: 'CSDT7', value: 'CSDT7' },
-  { label: 'CSDT8', value: 'CSDT8' },
-  { label: 'CSDT9', value: 'CSDT9' },
-  { label: 'HWPIE1', value: 'HWPIE1' },
-  { label: 'HWSLE1', value: 'HWSLE1' },
-  { label: 'HWTPE1', value: 'HWTPE1' },
-  { label: 'HWPIE2', value: 'HWPIE2' },
-  { label: 'HWECP1', value: 'HWECP1' },
-  { label: 'HWKPE1', value: 'HWKPE1' },
-  { label: 'HWBKE1', value: 'HWBKE1' },
-  { label: 'HWKJE1', value: 'HWKJE1' },
-  { label: 'HWCTE1', value: 'HWCTE1' },
-  { label: 'HWAYE1', value: 'HWAYE1' },
-  { label: 'NEDT1', value: 'NEDT1' },
-  { label: 'NEDT2', value: 'NEDT2' },
-  { label: 'NEDT3', value: 'NEDT3' },
-  { label: 'NEDT4', value: 'NEDT4' },
-  { label: 'NEDT5', value: 'NEDT5' },
-  { label: 'NEDT6', value: 'NEDT6' },
-  { label: 'NEDT7', value: 'NEDT7' },
-  { label: 'NEDT8', value: 'NEDT8' },
-  { label: 'NEDT9', value: 'NEDT9' },
-  { label: 'NEDT10', value: 'NEDT10' },
-  { label: 'NEDT11', value: 'NEDT11' },
-];
+const DeviceDetails: React.FC = () => {
+  const params = useLocalSearchParams<{
+    deviceName?: string;
+    deviceId?: string;
+    deviceCode?: string;
+    selectedItem?: string;
+    isEdit?: string;
+  }>();
 
-const typeOptions: DropdownItem[] = [
-  { label: 'DIC', value: 'DIC' },
-  { label: 'BIN', value: 'BIN' },
-];
+  const dispatch = useDispatch<any>();
 
-type DeviceDetailsRouteProp = RouteProp<Record<string, RouteParams>, string>;
+  // Parse selectedItem if it exists
+  const selectedItem = params.selectedItem 
+    ? JSON.parse(params.selectedItem as string) 
+    : null;
+  const isEdit = params.isEdit === 'true';
 
-interface DeviceDetailsProps {
-  route: DeviceDetailsRouteProp;
-}
-
-const DeviceDetails: React.FC<DeviceDetailsProps> = ({ route }) => {
-  const navigation = useNavigation<NavigationProp<any>>();
-  const { deviceName: initialDeviceName, selectedItem, isEdit } = route.params;
-
+  // State variables
   const [deviceName, setDeviceName] = useState<string>(
-    isEdit ? selectedItem?.deviceName || '' : initialDeviceName || ''
+    isEdit ? selectedItem?.deviceName || '' : params.deviceName || ''
   );
   const [deviceId, setDeviceId] = useState<string>(
-    isEdit ? selectedItem?.deviceId || '' : route.params.deviceId || ''
+    isEdit ? selectedItem?.deviceId || '' : params.deviceId || ''
   );
   const [simNumber, setSimNumber] = useState<string>(
     isEdit ? selectedItem?.mobileNumber || '' : ''
@@ -79,27 +47,42 @@ const DeviceDetails: React.FC<DeviceDetailsProps> = ({ route }) => {
     isEdit ? selectedItem?.cardNumber || '' : ''
   );
   const [deviceCode, setDeviceCode] = useState<string>(
-    isEdit ? selectedItem?.deviceCode || '' : route.params.deviceCode || ''
+    isEdit ? selectedItem?.deviceCode || '' : params.deviceCode || ''
   );
   const [sector, setSector] = useState<string>(
     isEdit ? selectedItem?.sector || '' : ''
   );
-  const [team, setTeam] = useState<string>(isEdit ? selectedItem?.team || '' : '');
-  const [type, setType] = useState<string>(isEdit ? selectedItem?.type || '' : '');
-  const [bin, setBin] = useState<string>(isEdit ? selectedItem?.binType || '' : '');
-  const [depth, setDepth] = useState<string>(isEdit ? selectedItem?.depth || '' : '');
+  const [team, setTeam] = useState<string>(
+    isEdit ? selectedItem?.team || '' : ''
+  );
+  const [type, setType] = useState<string>(
+    isEdit ? selectedItem?.type || '' : ''
+  );
+  const [bin, setBin] = useState<string>(
+    isEdit ? selectedItem?.binType || '' : ''
+  );
+  const [depth, setDepth] = useState<string>(
+    isEdit ? selectedItem?.depth || '' : ''
+  );
   const [latitude, setLatitude] = useState<string>('');
   const [longitude, setLongitude] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
-  const [items] = useState<DropdownItem[]>(teamOptions);
-  const [types] = useState<DropdownItem[]>(typeOptions);
-  const [bins, setBins] = useState<DropdownItem[]>([]);
+
+  // Dropdown states
+  const [items] = useState<DropdownItem[]>(
+    AppConstants.teamOptions.map(team => ({ label: team, value: team }))
+  );
+  const [types] = useState<DropdownItem[]>([
+    { label: AppConstants.deviceTypes.dic, value: AppConstants.deviceTypes.dic },
+    { label: AppConstants.deviceTypes.bin, value: AppConstants.deviceTypes.bin },
+  ]);
+  const [bins, setBins] = useState<DropdownItem[]>(
+    AppConstants.binTypes.map(binType => ({ label: binType, value: binType }))
+  );
 
   const [open, setOpen] = useState<boolean>(false);
   const [typeOpen, setTypeOpen] = useState<boolean>(false);
   const [binOpen, setBinOpen] = useState<boolean>(false);
-
-  const dispatch = useDispatch<any>();
 
   const reduxFunction = async (datavalues: boolean): Promise<void> => {
     await dispatch.LoginModel.handleIsEdit(datavalues);
@@ -115,30 +98,17 @@ const DeviceDetails: React.FC<DeviceDetailsProps> = ({ route }) => {
     requestLocationPermission();
   }, []);
 
-  useEffect(() => {
-    const str = firebase.remoteConfig().getValue('dropDownValues').asString();
-    const str_array = str.split(',');
-    const dropdownItem: DropdownItem[] = [];
-    for (let i = 0; i < str_array.length; i++) {
-      str_array[i] = str_array[i].replace(/^\s*/, '').replace(/\s*$/, '');
-      const dummy: DropdownItem = { label: str_array[i], value: str_array[i] };
-      dropdownItem.push(dummy);
-    }
-    setBins(dropdownItem);
-    console.log('dropdownItem', dropdownItem);
-  }, []);
-
   const requestLocationPermission = async (): Promise<void> => {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status === 'granted') {
         getUserCurrentLocation();
       } else {
-        setError('Location permission denied');
+        setError(AppConstants.messages.error.locationPermissionDenied);
       }
     } catch (error) {
       console.error('Permission request error:', error);
-      setError('Failed to request location permission');
+      setError(AppConstants.messages.error.fetchError);
     }
   };
 
@@ -151,47 +121,52 @@ const DeviceDetails: React.FC<DeviceDetailsProps> = ({ route }) => {
       setLongitude(location.coords.longitude.toString());
     } catch (error) {
       console.error('Error fetching location:', error);
-      setError('Unable to fetch location');
+      setError(AppConstants.messages.error.fetchError);
     }
   };
 
   const handleSubmit = async (): Promise<void> => {
+    // Validations
     if (!depth) {
       showToastFail({
-        message: 'Please enter the depth',
-        visibilityTime: 5000,
+        message: AppConstants.messages.error.emptyDepth,
+        visibilityTime: AppConstants.timeouts.toastDuration,
         position: 'bottom',
       });
       return;
     }
+    
     if (!sector) {
       showToastFail({
-        message: 'Please enter the sector',
-        visibilityTime: 5000,
+        message: AppConstants.messages.error.emptySector,
+        visibilityTime: AppConstants.timeouts.toastDuration,
         position: 'bottom',
       });
       return;
     }
+    
     if (!team) {
       showToastFail({
-        message: 'Please select the team',
-        visibilityTime: 5000,
+        message: AppConstants.messages.error.emptyTeam,
+        visibilityTime: AppConstants.timeouts.toastDuration,
         position: 'bottom',
       });
       return;
     }
+    
     if (!type) {
       showToastFail({
-        message: 'Please select the type',
-        visibilityTime: 5000,
+        message: AppConstants.messages.error.emptyType,
+        visibilityTime: AppConstants.timeouts.toastDuration,
         position: 'bottom',
       });
       return;
     }
-    if (type === 'BIN' && !bin) {
+    
+    if (type === AppConstants.deviceTypes.bin && !bin) {
       showToastFail({
-        message: 'Please select the bin type',
-        visibilityTime: 5000,
+        message: AppConstants.messages.error.emptyBin,
+        visibilityTime: AppConstants.timeouts.toastDuration,
         position: 'bottom',
       });
       return;
@@ -223,13 +198,18 @@ const DeviceDetails: React.FC<DeviceDetailsProps> = ({ route }) => {
     await dispatch.LoginModel.handleDeviceDetails(deviceDetails);
     await dispatch.LoginModel.handleUserAddress(datavalues.data);
 
-    navigation.navigate('CameraComp');
+    // Navigate to camera component (you'll need to create this route)
+    // router.push('/CameraComp');
+    
+    // For now, go back
+    router.back();
   };
 
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
       <ScrollView contentContainerStyle={styles.scrollContainer}>
         <Text style={styles.title}>
           {isEdit ? 'Edit Device' : 'Create Device'}
@@ -241,6 +221,7 @@ const DeviceDetails: React.FC<DeviceDetailsProps> = ({ route }) => {
           value={deviceName}
           editable={false}
           placeholder="Device Name"
+          placeholderTextColor="#999"
         />
 
         <Text style={styles.label}>Device ID</Text>
@@ -249,6 +230,7 @@ const DeviceDetails: React.FC<DeviceDetailsProps> = ({ route }) => {
           value={deviceId}
           editable={false}
           placeholder="Device ID"
+          placeholderTextColor="#999"
         />
 
         <Text style={styles.label}>Latitude</Text>
@@ -257,6 +239,7 @@ const DeviceDetails: React.FC<DeviceDetailsProps> = ({ route }) => {
           value={latitude}
           editable={false}
           placeholder="Latitude"
+          placeholderTextColor="#999"
         />
 
         <Text style={styles.label}>Longitude</Text>
@@ -265,6 +248,7 @@ const DeviceDetails: React.FC<DeviceDetailsProps> = ({ route }) => {
           value={longitude}
           editable={false}
           placeholder="Longitude"
+          placeholderTextColor="#999"
         />
 
         <Text style={styles.label}>DIC height (cm)</Text>
@@ -273,6 +257,7 @@ const DeviceDetails: React.FC<DeviceDetailsProps> = ({ route }) => {
           value={depth}
           onChangeText={setDepth}
           placeholder="Depth"
+          placeholderTextColor="#999"
           keyboardType="numeric"
         />
 
@@ -282,6 +267,7 @@ const DeviceDetails: React.FC<DeviceDetailsProps> = ({ route }) => {
           value={sector}
           onChangeText={setSector}
           placeholder="Sector"
+          placeholderTextColor="#999"
         />
 
         <Text style={styles.label}>Team</Text>
@@ -314,7 +300,7 @@ const DeviceDetails: React.FC<DeviceDetailsProps> = ({ route }) => {
           dropDownDirection="BOTTOM"
         />
 
-        {type === 'BIN' && (
+        {type === AppConstants.deviceTypes.bin && (
           <>
             <Text style={styles.label}>Bin Type</Text>
             <DropDownPicker
@@ -327,7 +313,7 @@ const DeviceDetails: React.FC<DeviceDetailsProps> = ({ route }) => {
               placeholder="Select Bin Type"
               style={{ marginBottom: 30, marginTop: 20 }}
               dropDownContainerStyle={{
-                backgroundColor: 'white',
+                backgroundColor: AppConstants.colors.white,
               }}
               listMode="SCROLLVIEW"
               dropDownDirection="TOP"
@@ -335,7 +321,11 @@ const DeviceDetails: React.FC<DeviceDetailsProps> = ({ route }) => {
           </>
         )}
 
-        <Button title="Take Photo" onPress={handleSubmit} />
+        <Button 
+          title="Submit" 
+          onPress={handleSubmit}
+          color={AppConstants.colors.error}
+        />
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -344,7 +334,7 @@ const DeviceDetails: React.FC<DeviceDetailsProps> = ({ route }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: AppConstants.colors.background,
   },
   scrollContainer: {
     padding: 20,
@@ -353,6 +343,7 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
     marginBottom: 20,
+    color: AppConstants.colors.secondary,
   },
   label: {
     fontSize: 16,
@@ -367,6 +358,7 @@ const styles = StyleSheet.create({
     padding: 10,
     marginVertical: 10,
     color: 'black',
+    backgroundColor: AppConstants.colors.white,
   },
 });
 

@@ -1,5 +1,3 @@
-// types.ts - Central type definitions
-
 export interface Coordinates {
   latitude: string;
   longitude: string;

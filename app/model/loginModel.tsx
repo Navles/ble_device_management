@@ -1,4 +1,3 @@
-// loginModel.ts
 import { Coordinates, LoginState } from '../../types/types';
 import appConstants from '../utlis/AppConstants';
 

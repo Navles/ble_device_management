@@ -1,4 +1,3 @@
-// MainScreen.tsx
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { NavigationProp, useNavigation } from "@react-navigation/native";
 import * as Crypto from "expo-crypto";
@@ -110,6 +109,12 @@ const MainScreen: React.FC = () => {
     loginUser();
   }, []);
 
+  const handleNavigateToRecords = (): void => {
+    router.push("./DeviceRecords");
+  };
+  const handleNavigateToBleScan = (): void => {
+    router.push("./BleScan");
+  };
   return (
     <View
       style={{
@@ -157,7 +162,7 @@ const MainScreen: React.FC = () => {
               alignContent: "center",
               alignItems: "center",
             }}
-            onPress={() => router.push("./DeviceRecords")}
+            onPress={handleNavigateToRecords}
           >
             <MaterialIcons
               name="checklist"
@@ -187,7 +192,7 @@ const MainScreen: React.FC = () => {
               alignContent: "center",
               alignItems: "center",
             }}
-            onPress={() => router.push("./BleScan")}
+            onPress={handleNavigateToBleScan}
           >
             <MaterialIcons
               name="checklist"
