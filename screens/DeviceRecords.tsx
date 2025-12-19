@@ -279,7 +279,7 @@ const DeviceRecords: React.FC = () => {
               <Ionicons
                 name="reload-circle"
                 size={width / 10}
-                color={AppConstants.colors.error}
+                color={AppConstants.colors.highlight}
                 onPress={() => {
                   HandleAPICall({
                     row: rowValue,
@@ -299,7 +299,7 @@ const DeviceRecords: React.FC = () => {
                 valueField="value"
                 labelField="label"
                 style={{
-                  borderColor: AppConstants.colors.error,
+                  borderColor: AppConstants.colors.primary,
                   borderWidth: 1,
                   backgroundColor: AppConstants.colors.white,
                   borderRadius: 5,
@@ -316,7 +316,7 @@ const DeviceRecords: React.FC = () => {
                 width: "40%",
                 marginBottom: 2,
                 borderWidth: 1,
-                borderColor: AppConstants.colors.error,
+                borderColor: AppConstants.colors.primary,
                 borderRadius: 5,
                 paddingHorizontal: 10,
                 height: 40,
@@ -330,7 +330,7 @@ const DeviceRecords: React.FC = () => {
           <DataTable>
             <DataTable.Header
               style={{
-                backgroundColor: AppConstants.colors.error,
+                backgroundColor: AppConstants.colors.primary,
                 borderTopLeftRadius: 10,
                 borderTopRightRadius: 10,
               }}
@@ -417,7 +417,7 @@ const DeviceRecords: React.FC = () => {
                           <MaterialIcons
                             name="read-more"
                             size={30}
-                            color={AppConstants.colors.error}
+                            color={AppConstants.colors.highlight}
                           />
                         </TouchableOpacity>
                       </DataTable.Cell>

@@ -30,7 +30,7 @@ export default function RootLayout() {
             headerShown: true,
             title: "BLE Scanner",
             headerStyle: {
-              backgroundColor: AppConstants.colors.error,
+              backgroundColor: AppConstants.colors.primary,
             },
             headerTintColor: AppConstants.colors.white,
             headerTitleStyle: {
@@ -45,7 +45,7 @@ export default function RootLayout() {
             headerShown: true,
             title: "Device Details",
             headerStyle: {
-              backgroundColor: AppConstants.colors.error,
+              backgroundColor: AppConstants.colors.primary,
             },
             headerTintColor: AppConstants.colors.white,
             headerTitleStyle: {
@@ -60,7 +60,7 @@ export default function RootLayout() {
             headerShown: true,
             title: "Device Records",
             headerStyle: {
-              backgroundColor: AppConstants.colors.error,
+              backgroundColor: AppConstants.colors.primary,
             },
             headerTintColor: AppConstants.colors.white,
             headerTitleStyle: {
@@ -80,6 +80,14 @@ export default function RootLayout() {
           options={{
             headerShown: true,
             title: "Device Monitor",
+
+            headerStyle: {
+              backgroundColor: AppConstants.colors.primary,
+            },
+            headerTintColor: AppConstants.colors.white,
+            headerTitleStyle: {
+              fontWeight: "bold",
+            },
           }}
         />
       </Stack>

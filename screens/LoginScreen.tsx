@@ -3,22 +3,22 @@ import { showToastFail, showToastSuccess } from "@/app/utlis/ToastConfig";
 import { router } from "expo-router";
 import React, { useState } from "react";
 import {
-  ActivityIndicator,
-  Dimensions,
-  Image,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Dimensions,
+    Image,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { useDispatch } from "react-redux";
 
-const logo = require("../assets/images/ctmlogoedited.png");
+const logo = require("../assets/images/appLogo.png");
 
 const LoginScreen: React.FC = () => {
   const { width } = Dimensions.get("window");
@@ -276,7 +276,7 @@ const styles = StyleSheet.create({
     fontSize: 20,
   },
   loginButton: {
-    backgroundColor: AppConstants.colors.error,
+    backgroundColor: AppConstants.colors.highlight,
     borderRadius: 50,
     padding: 15,
     alignItems: "center",

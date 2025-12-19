@@ -1,558 +1,493 @@
 // screens/DeviceMonitor.tsx
-import { MaterialIcons } from '@expo/vector-icons';
-import { useLocalSearchParams } from 'expo-router';
-import React, { useEffect, useRef, useState } from 'react';
+import { MaterialIcons } from "@expo/vector-icons";
+import { Buffer } from "buffer";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import React, { useEffect, useRef, useState } from "react";
 import {
-  Platform,
-  RefreshControl,
+  Alert,
+  Dimensions,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
-  View
-} from 'react-native';
-import { Device as BLEDevice, BleManager } from 'react-native-ble-plx';
-import AppConstants from '../app/utlis/AppConstants';
-import { showToastFail, showToastSuccess } from '../app/utlis/ToastConfig';
+  View,
+} from "react-native";
+import { Device as BLEDevice } from "react-native-ble-plx";
+import manager from "../app/ble/bleManager";
+import { Theme } from "../constants/ThemeConstants";
 
-interface DeviceNotification {
+global.Buffer = global.Buffer || Buffer;
+
+const { width } = Dimensions.get("screen");
+
+// -------------------- BLE UUIDs --------------------
+const NOTIFICATION_SERVICE_UUID = "4fafc201-1fb5-459e-8fcc-c5c9c331914b";
+const NOTIFICATION_CHAR_UUID = "beb5483e-36e1-4688-b7f5-ea07361b26ad";
+
+// -------------------- Types --------------------
+interface StepItem {
+  label: string;
+  isCompleted: boolean;
+  value?: string | number;
+  color?: string;
+  icon?: string;
+}
+
+interface LogEntry {
   id: string;
   timestamp: string;
-  type: string;
   message: string;
-  isImportant: boolean;
+  type?: "info" | "success" | "warning" | "error";
 }
 
-interface DeviceStatus {
-  tofValue?: number;
-  modemSimStatus?: string;
-  networkStatus?: string;
-  internetStatus?: string;
-  iccid?: string;
-  signalStrength?: string;
-  signalQuality?: number;
-  lastDataSend?: string;
-  lastImageCapture?: string;
-  lastImageSend?: string;
-  batteryLevel?: number;
-  batteryVoltage?: number;
-  isCharging?: boolean;
-}
+// -------------------- CSQ Helper --------------------
+const getSignalInfo = (csq: number) => {
+  if (csq >= 25) return { label: "Excellent", emoji: "📶", color: "#22c55e" };
+  if (csq >= 20) return { label: "Very Good", emoji: "📶", color: "#4ade80" };
+  if (csq >= 15) return { label: "Good", emoji: "📶", color: "#facc15" };
+  if (csq >= 10) return { label: "Fair", emoji: "📡", color: "#fb923c" };
+  return { label: "Poor", emoji: "📡", color: "#ef4444" };
+};
 
 const DeviceMonitor: React.FC = () => {
+  const router = useRouter();
   const params = useLocalSearchParams<{
     deviceId?: string;
     deviceName?: string;
   }>();
 
-  const [manager] = useState<BleManager>(() => new BleManager());
+  // BLE State
   const [device, setDevice] = useState<BLEDevice | null>(null);
-  const [isConnected, setIsConnected] = useState<boolean>(false);
-  const [isConnecting, setIsConnecting] = useState<boolean>(false);
-  const [notifications, setNotifications] = useState<DeviceNotification[]>([]);
-  const [deviceStatus, setDeviceStatus] = useState<DeviceStatus>({});
-  const [isMonitoring, setIsMonitoring] = useState<boolean>(false);
-  const [autoScroll, setAutoScroll] = useState<boolean>(true);
-  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const [isConnected, setIsConnected] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
 
+  // Steps with icons
+  const [steps, setSteps] = useState<Record<string, StepItem>>({
+    scan: { label: "Scan & Discover", isCompleted: true, icon: "radar" },
+    connect: { label: "Connect Device", isCompleted: false, icon: "link" },
+    services: {
+      label: "Discover Services",
+      isCompleted: false,
+      icon: "cloud-done",
+    },
+    subscribe: {
+      label: "Subscribe Notifications",
+      isCompleted: false,
+      icon: "notifications-active",
+    },
+    tof: {
+      label: "ToF Sensor",
+      isCompleted: false,
+      value: "",
+      icon: "straighten",
+    },
+    power: {
+      label: "Power On",
+      isCompleted: false,
+      icon: "power-settings-new",
+    },
+    modem: { label: "Modem & SIM", isCompleted: false, icon: "sim-card" },
+    network: {
+      label: "Network Registration",
+      isCompleted: false,
+      icon: "signal-cellular-alt",
+    },
+    internet: {
+      label: "Internet Connection",
+      isCompleted: false,
+      icon: "wifi",
+    },
+    iccid: {
+      label: "ICCID",
+      isCompleted: false,
+      value: "",
+      icon: "credit-card",
+    },
+    csq: {
+      label: "Signal Quality",
+      isCompleted: false,
+      value: "",
+      color: "#6b7280",
+      icon: "network-check",
+    },
+    dataSent: { label: "Data Sent", isCompleted: false, icon: "send" },
+    imgCapture: { label: "Image Captured", isCompleted: false, icon: "camera" },
+    imgSent: { label: "Image Sent", isCompleted: false, icon: "image" },
+    modemShutdown: {
+      label: "Modem Shutdown",
+      isCompleted: false,
+      icon: "power-off",
+    },
+    sleep: { label: "Device Sleep", isCompleted: false, icon: "bedtime" },
+  });
+
+  const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [showLogs, setShowLogs] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
-  const notificationCountRef = useRef<number>(0);
-
-  // BLE Service and Characteristic UUIDs (adjust these to match your device)
-  const NOTIFICATION_SERVICE_UUID = '0000ffe0-0000-1000-8000-00805f9b34fb';
-  const NOTIFICATION_CHAR_UUID = '0000ffe1-0000-1000-8000-00805f9b34fb';
-  const BATTERY_SERVICE_UUID = '0000180f-0000-1000-8000-00805f9b34fb';
-  const BATTERY_CHAR_UUID = '00002a19-0000-1000-8000-00805f9b34fb';
 
   useEffect(() => {
     connectToDevice();
 
     return () => {
-      disconnectDevice();
-      manager.destroy();
+      if (device) {
+        manager
+          .cancelDeviceConnection(device.id)
+          .catch((e) => console.log("Disconnect error", e));
+      }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
-    if (autoScroll && notifications.length > 0) {
+    if (showLogs) {
       scrollViewRef.current?.scrollToEnd({ animated: true });
     }
-  }, [notifications, autoScroll]);
+  }, [logs, showLogs]);
 
-  const connectToDevice = async (): Promise<void> => {
-    if (!params.deviceId) {
-      showToastFail({
-        message: 'No device ID provided',
-        position: 'bottom',
-      });
-      return;
-    }
+  // -------------------- Helpers --------------------
+  const addLog = (message: string, type: LogEntry["type"] = "info") => {
+    setLogs((prev) => [
+      ...prev,
+      {
+        id: Math.random().toString(),
+        timestamp: new Date().toLocaleTimeString(),
+        message,
+        type,
+      },
+    ]);
+  };
 
-    setIsConnecting(true);
+  const updateStep = (key: string, updates: Partial<StepItem>) => {
+    setSteps((prev) => ({ ...prev, [key]: { ...prev[key], ...updates } }));
+  };
 
+  // -------------------- BLE Connection --------------------
+  const connectToDevice = async () => {
+    if (!params.deviceId) return;
     try {
-      console.log('Connecting to device:', params.deviceId);
-      
-      const connectedDevice = await manager.connectToDevice(params.deviceId, {
-        timeout: 15000,
-      });
+      setIsConnecting(true);
+      updateStep("connect", { label: "Connecting..." });
 
-      await connectedDevice.discoverAllServicesAndCharacteristics();
-      
+      console.log(`🔵 Connecting to: ${params.deviceId}`);
+      const connectedDevice = await manager.connectToDevice(params.deviceId, {
+        timeout: 10000,
+      });
       setDevice(connectedDevice);
       setIsConnected(true);
+      updateStep("connect", { isCompleted: true, label: "Connect Device" });
+      addLog("Device connected successfully", "success");
 
-      showToastSuccess({
-        message: 'Connected successfully',
-        position: 'bottom',
-      });
+      await connectedDevice.discoverAllServicesAndCharacteristics();
+      updateStep("services", { isCompleted: true });
+      addLog("Services discovered", "success");
 
-      // Start monitoring
-      await startMonitoring(connectedDevice);
+      // Subscribe
+      monitorNotifications(connectedDevice);
+      updateStep("subscribe", { isCompleted: true });
+      addLog("Subscribed to notifications", "success");
+
+      console.log("🟢 BLE Connected & Subscribed!");
     } catch (error: any) {
-      console.error('Connection error:', error);
-      showToastFail({
-        message: `Connection failed: ${error.message}`,
-        position: 'bottom',
-      });
+      console.error("Connection failed:", error);
+      Alert.alert("Connection Error", error.message || "Failed to connect");
       setIsConnected(false);
+      updateStep("connect", { label: "Connect Device", isCompleted: false });
+      addLog(`Connection failed: ${error.message}`, "error");
     } finally {
       setIsConnecting(false);
     }
   };
 
-  const disconnectDevice = async (): Promise<void> => {
-    try {
-      if (device && isConnected) {
-        await manager.cancelDeviceConnection(device.id);
-        setIsConnected(false);
-        setDevice(null);
-        setIsMonitoring(false);
+  const monitorNotifications = (device: BLEDevice) => {
+    device.monitorCharacteristicForService(
+      NOTIFICATION_SERVICE_UUID,
+      NOTIFICATION_CHAR_UUID,
+      (error, characteristic) => {
+        if (error) {
+          console.log("❌ Notification error:", error);
+          addLog(`Notification error: ${error.message}`, "error");
+          return;
+        }
+
+        if (characteristic?.value) {
+          const rawData = Buffer.from(characteristic.value, "base64").toString(
+            "utf-8"
+          );
+          parseLog(rawData);
+        }
       }
-    } catch (error) {
-      console.error('Disconnect error:', error);
-    }
+    );
   };
 
-  const startMonitoring = async (connectedDevice: BLEDevice): Promise<void> => {
-    setIsMonitoring(true);
+  // -------------------- Parse BLE Logs --------------------
+  const parseLog = (raw: string) => {
+    const clean = raw.trim();
+    if (!clean) return;
 
-    try {
-      // Read battery level initially
-      await readBatteryLevel(connectedDevice);
+    const lower = clean.toLowerCase();
+    let logType: LogEntry["type"] = "info";
 
-      // Subscribe to notification characteristic
-      await subscribeToNotifications(connectedDevice);
+    if (lower.includes("error") || lower.includes("fail")) {
+      logType = "error";
+    } else if (lower.includes("success") || lower.includes("ok")) {
+      logType = "success";
+    } else if (lower.includes("warning")) {
+      logType = "warning";
+    }
 
-      // Poll battery level every 30 seconds
-      const batteryInterval = setInterval(async () => {
-        if (isConnected) {
-          await readBatteryLevel(connectedDevice);
-        } else {
-          clearInterval(batteryInterval);
-        }
-      }, 30000);
+    addLog(clean, logType);
 
-    } catch (error: any) {
-      console.error('Monitoring error:', error);
-      showToastFail({
-        message: `Monitoring failed: ${error.message}`,
-        position: 'bottom',
+    if (lower.includes("tof_value")) {
+      const match = lower.match(/tof_value\D*(\d+)/);
+      if (match)
+        updateStep("tof", { isCompleted: true, value: `${match[1]} mm` });
+    }
+    if (lower.includes("power on")) updateStep("power", { isCompleted: true });
+    if (lower.includes("modem") && lower.includes("sim ok"))
+      updateStep("modem", { isCompleted: true });
+    if (lower.includes("network reg ok"))
+      updateStep("network", { isCompleted: true });
+    if (lower.includes("connected to internet"))
+      updateStep("internet", { isCompleted: true });
+    if (lower.includes("iccid")) {
+      const match = clean.match(/iccid[:\s]*([0-9A-F]+)/i);
+      updateStep("iccid", {
+        isCompleted: true,
+        value: match ? match[1].substring(0, 12) + "..." : "Received",
       });
     }
-  };
-
-  const subscribeToNotifications = async (connectedDevice: BLEDevice): Promise<void> => {
-    try {
-      // Subscribe to the notification characteristic
-      connectedDevice.monitorCharacteristicForService(
-        NOTIFICATION_SERVICE_UUID,
-        NOTIFICATION_CHAR_UUID,
-        (error, characteristic) => {
-          if (error) {
-            console.error('Notification subscription error:', error);
-            return;
-          }
-
-          if (characteristic?.value) {
-            const notificationData = Buffer.from(characteristic.value, 'base64').toString('utf-8');
-            parseNotification(notificationData);
-          }
-        }
-      );
-
-      console.log('Subscribed to notifications');
-    } catch (error) {
-      console.error('Subscription error:', error);
-      // If notification service not available, simulate with polling
-      startPollingNotifications(connectedDevice);
-    }
-  };
-
-  const startPollingNotifications = (connectedDevice: BLEDevice): void => {
-    // Fallback: poll for notifications every 2 seconds
-    const pollInterval = setInterval(async () => {
-      if (isConnected) {
-        try {
-          const characteristic = await connectedDevice.readCharacteristicForService(
-            NOTIFICATION_SERVICE_UUID,
-            NOTIFICATION_CHAR_UUID
-          );
-
-          if (characteristic.value) {
-            const notificationData = Buffer.from(characteristic.value, 'base64').toString('utf-8');
-            parseNotification(notificationData);
-          }
-        } catch (error) {
-          // Ignore read errors during polling
-        }
-      } else {
-        clearInterval(pollInterval);
-      }
-    }, 2000);
-  };
-
-  const parseNotification = (data: string): void => {
-    console.log('Received notification:', data);
-
-    const timestamp = new Date().toLocaleTimeString();
-    let type = 'info';
-    let isImportant = false;
-
-    // Parse different notification types
-    if (data.includes('ToF_value')) {
-      const match = data.match(/ToF_value:\s*(\d+)/);
+    if (lower.includes("+csq")) {
+      const match = clean.match(/\+CSQ:\s*(\d+)/i);
       if (match) {
-        const tofValue = parseInt(match[1]);
-        setDeviceStatus(prev => ({ ...prev, tofValue }));
-        isImportant = true;
-        type = 'measurement';
+        const val = parseInt(match[1], 10);
+        const quality = getSignalInfo(val);
+        updateStep("csq", {
+          isCompleted: true,
+          value: `${val} ${quality.emoji}`,
+          color: quality.color,
+        });
       }
-    } else if (data.includes('MODEM & SIM OK')) {
-      setDeviceStatus(prev => ({ ...prev, modemSimStatus: 'OK' }));
-      isImportant = true;
-      type = 'status';
-    } else if (data.includes('Network Reg OK')) {
-      setDeviceStatus(prev => ({ ...prev, networkStatus: 'OK' }));
-      isImportant = true;
-      type = 'status';
-    } else if (data.includes('Conncted to Internet')) {
-      setDeviceStatus(prev => ({ ...prev, internetStatus: 'Connected' }));
-      isImportant = true;
-      type = 'status';
-    } else if (data.includes('ICCCID')) {
-      const match = data.match(/ICCCID:\s*([A-F0-9]+)/);
-      if (match) {
-        setDeviceStatus(prev => ({ ...prev, iccid: match[1] }));
-        isImportant = true;
-        type = 'info';
-      }
-    } else if (data.includes('+CSQ:')) {
-      const match = data.match(/\+CSQ:\s*(\d+),(\d+)/);
-      if (match) {
-        const signalValue = parseInt(match[1]);
-        setDeviceStatus(prev => ({ 
-          ...prev, 
-          signalStrength: data,
-          signalQuality: signalValue 
-        }));
-        isImportant = true;
-        type = 'signal';
-      }
-    } else if (data.includes('Data send successfully')) {
-      setDeviceStatus(prev => ({ ...prev, lastDataSend: timestamp }));
-      isImportant = true;
-      type = 'success';
-    } else if (data.includes('Image Capture ok')) {
-      setDeviceStatus(prev => ({ ...prev, lastImageCapture: timestamp }));
-      isImportant = true;
-      type = 'success';
-    } else if (data.includes('Image send successfully')) {
-      setDeviceStatus(prev => ({ ...prev, lastImageSend: timestamp }));
-      isImportant = true;
-      type = 'success';
-    } else if (data.includes('+HTTPACTION:')) {
-      isImportant = true;
-      type = 'http';
     }
-
-    // Add notification to list
-    const notification: DeviceNotification = {
-      id: `notification_${notificationCountRef.current++}`,
-      timestamp,
-      type,
-      message: data,
-      isImportant,
-    };
-
-    setNotifications(prev => [...prev, notification]);
+    if (lower.includes("data send successful") || lower.includes("data sent"))
+      updateStep("dataSent", { isCompleted: true });
+    if (lower.includes("image capture"))
+      updateStep("imgCapture", { isCompleted: true });
+    if (lower.includes("image send"))
+      updateStep("imgSent", { isCompleted: true });
+    if (lower.includes("modem shutdown"))
+      updateStep("modemShutdown", { isCompleted: true });
+    if (lower.includes("sleep")) updateStep("sleep", { isCompleted: true });
   };
 
-  const readBatteryLevel = async (connectedDevice: BLEDevice): Promise<void> => {
-    try {
-      const characteristic = await connectedDevice.readCharacteristicForService(
-        BATTERY_SERVICE_UUID,
-        BATTERY_CHAR_UUID
-      );
+  // Get completion stats
+  const completedSteps = Object.values(steps).filter(
+    (s) => s.isCompleted
+  ).length;
+  const totalSteps = Object.values(steps).length;
+  const progressPercentage = Math.round((completedSteps / totalSteps) * 100);
 
-      if (characteristic.value) {
-        const batteryLevel = parseInt(characteristic.value, 10);
-        setDeviceStatus(prev => ({ ...prev, batteryLevel }));
-      }
-    } catch (error) {
-      console.log('Battery service not available');
-    }
-  };
+  // -------------------- UI --------------------
+  const StepRow = ({ label, isCompleted, value, color, icon }: StepItem) => (
+    <View style={styles.stepRow}>
+      <View style={styles.stepLeft}>
+        <View
+          style={[
+            styles.iconContainer,
+            {
+              backgroundColor: isCompleted ? "#22c55e15" : "#f3f4f6",
+            },
+          ]}
+        >
+          <MaterialIcons
+            name={
+              (icon as any) ||
+              (isCompleted ? "check-circle" : "radio-button-unchecked")
+            }
+            size={20}
+            color={isCompleted ? "#22c55e" : "#9ca3af"}
+          />
+        </View>
+        <Text
+          style={[
+            styles.stepLabel,
+            {
+              color: isCompleted ? "#1f2937" : "#6b7280",
+              fontWeight: isCompleted ? "600" : "400",
+            },
+          ]}
+        >
+          {label}
+        </Text>
+      </View>
+      {value && (
+        <Text style={[styles.stepValue, { color: color || "#3b82f6" }]}>
+          {value}
+        </Text>
+      )}
+    </View>
+  );
 
-  const handleRefresh = async (): Promise<void> => {
-    setIsRefreshing(true);
-    if (device) {
-      await readBatteryLevel(device);
-    }
-    setIsRefreshing(false);
-  };
-
-  const clearNotifications = (): void => {
-    setNotifications([]);
-    notificationCountRef.current = 0;
-  };
-
-  const getSignalQualityText = (quality?: number): string => {
-    if (!quality) return 'Unknown';
-    if (quality >= 20) return 'Excellent';
-    if (quality >= 15) return 'Good';
-    if (quality >= 10) return 'Fair';
-    if (quality >= 5) return 'Poor';
-    return 'Very Poor';
-  };
-
-  const getSignalQualityColor = (quality?: number): string => {
-    if (!quality) return '#999';
-    if (quality >= 20) return '#4CAF50';
-    if (quality >= 15) return '#8BC34A';
-    if (quality >= 10) return '#FFC107';
-    if (quality >= 5) return '#FF9800';
-    return '#F44336';
-  };
-
-  const getBatteryIcon = (level?: number): string => {
-    if (!level) return 'battery-unknown';
-    if (level >= 80) return 'battery-full';
-    if (level >= 60) return 'battery-80';
-    if (level >= 40) return 'battery-60';
-    if (level >= 20) return 'battery-30';
-    return 'battery-20';
-  };
-
-  const getBatteryColor = (level?: number): string => {
-    if (!level) return '#999';
-    if (level >= 60) return '#4CAF50';
-    if (level >= 30) return '#FFC107';
-    return '#F44336';
-  };
-
-  const getNotificationIcon = (type: string): string => {
+  const getLogIcon = (type?: LogEntry["type"]) => {
     switch (type) {
-      case 'measurement': return 'straighten';
-      case 'status': return 'check-circle';
-      case 'signal': return 'signal-cellular-alt';
-      case 'success': return 'check';
-      case 'http': return 'cloud-upload';
-      default: return 'info';
-    }
-  };
-
-  const getNotificationColor = (type: string): string => {
-    switch (type) {
-      case 'measurement': return '#2196F3';
-      case 'status': return '#4CAF50';
-      case 'signal': return '#9C27B0';
-      case 'success': return '#4CAF50';
-      case 'http': return '#FF9800';
-      default: return '#757575';
+      case "success":
+        return { name: "check-circle", color: "#10b981" };
+      case "error":
+        return { name: "error", color: "#ef4444" };
+      case "warning":
+        return { name: "warning", color: "#f59e0b" };
+      default:
+        return { name: "info", color: "#3b82f6" };
     }
   };
 
   return (
     <View style={styles.container}>
-      {/* Header */}
-      {/* <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <MaterialIcons name="arrow-back" size={24} color={AppConstants.colors.white} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Device Monitor</Text>
-        <TouchableOpacity onPress={clearNotifications}>
-          <MaterialIcons name="delete-sweep" size={24} color={AppConstants.colors.white} />
-        </TouchableOpacity>
-      </View> */}
-
       {/* Device Info Card */}
-      <View style={styles.card}>
-        <View style={styles.cardHeader}>
-          <Text style={styles.cardTitle}>{params.deviceName || 'Device'}</Text>
-          <View style={styles.statusBadge}>
-            <View
-              style={[
-                styles.statusDot,
-                { backgroundColor: isConnected ? '#4CAF50' : '#F44336' },
-              ]}
+      <View style={styles.deviceCard}>
+        <View style={styles.deviceCardHeader}>
+          <View style={styles.deviceIconCircle}>
+            <MaterialIcons
+              name="devices"
+              size={24}
+              color={Theme.colors.primary}
             />
+          </View>
+          <View style={styles.deviceInfo}>
+            <Text style={styles.deviceName}>
+              {params.deviceName || "Unknown Device"}
+            </Text>
+            <Text style={styles.deviceId}>{params.deviceId}</Text>
+          </View>
+        </View>
+        <View style={styles.statusRow}>
+          <View
+            style={[
+              styles.statusBadge,
+              {
+                backgroundColor: isConnected
+                  ? "#22c55e"
+                  : isConnecting
+                  ? "#f59e0b"
+                  : "#ef4444",
+              },
+            ]}
+          >
+            <View style={styles.statusDot} />
             <Text style={styles.statusText}>
-              {isConnecting ? 'Connecting...' : isConnected ? 'Connected' : 'Disconnected'}
+              {isConnecting
+                ? "Connecting..."
+                : isConnected
+                ? "Connected"
+                : "Disconnected"}
+            </Text>
+          </View>
+          <View style={styles.progressBadge}>
+            <MaterialIcons name="timeline" size={16} color="#3b82f6" />
+            <Text style={styles.progressText}>
+              {completedSteps}/{totalSteps} ({progressPercentage}%)
             </Text>
           </View>
         </View>
-
-        <Text style={styles.deviceId}>ID: {params.deviceId}</Text>
       </View>
 
-      {/* Status Overview Card */}
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Status Overview</Text>
-
-        <View style={styles.statusGrid}>
-          {/* Battery */}
-          <View style={styles.statusItem}>
-            <MaterialIcons 
-              name={getBatteryIcon(deviceStatus.batteryLevel)} 
-              size={24} 
-              color={getBatteryColor(deviceStatus.batteryLevel)} 
-            />
-            <Text style={styles.statusLabel}>Battery</Text>
-            <Text style={styles.statusValue}>
-              {deviceStatus.batteryLevel ? `${deviceStatus.batteryLevel}%` : 'N/A'}
-            </Text>
-          </View>
-
-          {/* Signal */}
-          <View style={styles.statusItem}>
-            <MaterialIcons 
-              name="signal-cellular-alt" 
-              size={24} 
-              color={getSignalQualityColor(deviceStatus.signalQuality)} 
-            />
-            <Text style={styles.statusLabel}>Signal</Text>
-            <Text style={styles.statusValue}>
-              {deviceStatus.signalQuality ? deviceStatus.signalQuality : 'N/A'}
-            </Text>
-            <Text style={styles.statusSubtext}>
-              {getSignalQualityText(deviceStatus.signalQuality)}
-            </Text>
-          </View>
-
-          {/* ToF Value */}
-          <View style={styles.statusItem}>
-            <MaterialIcons name="straighten" size={24} color="#2196F3" />
-            <Text style={styles.statusLabel}>ToF</Text>
-            <Text style={styles.statusValue}>
-              {deviceStatus.tofValue || 'N/A'}
-            </Text>
-            {deviceStatus.tofValue && (
-              <Text style={styles.statusSubtext}>mm</Text>
-            )}
-          </View>
-
-          {/* Network */}
-          <View style={styles.statusItem}>
-            <MaterialIcons 
-              name="network-check" 
-              size={24} 
-              color={deviceStatus.internetStatus ? '#4CAF50' : '#999'} 
-            />
-            <Text style={styles.statusLabel}>Network</Text>
-            <Text style={styles.statusValue}>
-              {deviceStatus.internetStatus || 'N/A'}
-            </Text>
-          </View>
+      {/* Steps List */}
+      <ScrollView
+        style={styles.stepsContainer}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.sectionHeader}>
+          <MaterialIcons
+            name="list-alt"
+            size={20}
+            color={Theme.colors.primary}
+          />
+          <Text style={styles.sectionTitle}>Progress Steps</Text>
         </View>
-
-        {/* Additional Info */}
-        {deviceStatus.iccid && (
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>ICCID:</Text>
-            <Text style={styles.infoValue} numberOfLines={1}>
-              {deviceStatus.iccid}
-            </Text>
-          </View>
-        )}
-
-        {deviceStatus.lastDataSend && (
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Last Data Send:</Text>
-            <Text style={styles.infoValue}>{deviceStatus.lastDataSend}</Text>
-          </View>
-        )}
-
-        {deviceStatus.lastImageCapture && (
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Last Image Capture:</Text>
-            <Text style={styles.infoValue}>{deviceStatus.lastImageCapture}</Text>
-          </View>
-        )}
-      </View>
-
-      {/* Notifications */}
-      <View style={[styles.card, styles.notificationsCard]}>
-        <View style={styles.notificationsHeader}>
-          <Text style={styles.cardTitle}>
-            Notifications ({notifications.length})
-          </Text>
-          <TouchableOpacity onPress={() => setAutoScroll(!autoScroll)}>
-            <MaterialIcons 
-              name={autoScroll ? 'keyboard-arrow-down' : 'keyboard-arrow-up'} 
-              size={24} 
-              color={AppConstants.colors.secondary} 
-            />
-          </TouchableOpacity>
-        </View>
-
-        <ScrollView
-          ref={scrollViewRef}
-          style={styles.notificationsList}
-          refreshControl={
-            <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />
-          }
-        >
-          {notifications.length === 0 ? (
-            <View style={styles.emptyNotifications}>
-              <MaterialIcons name="notifications-none" size={48} color="#999" />
-              <Text style={styles.emptyText}>
-                {isMonitoring ? 'Waiting for notifications...' : 'No notifications yet'}
-              </Text>
+        <View style={styles.card}>
+          {Object.keys(steps).map((key, index) => (
+            <View key={key}>
+              <StepRow {...steps[key]} />
+              {index < Object.keys(steps).length - 1 && (
+                <View style={styles.stepDivider} />
+              )}
             </View>
-          ) : (
-            notifications.map((notification) => (
-              <View 
-                key={notification.id} 
-                style={[
-                  styles.notificationItem,
-                  notification.isImportant && styles.importantNotification
-                ]}
-              >
-                <MaterialIcons 
-                  name={getNotificationIcon(notification.type)} 
-                  size={20} 
-                  color={getNotificationColor(notification.type)} 
-                />
-                <View style={styles.notificationContent}>
-                  <Text style={styles.notificationTime}>{notification.timestamp}</Text>
-                  <Text style={styles.notificationMessage}>{notification.message}</Text>
-                </View>
-              </View>
-            ))
-          )}
-        </ScrollView>
-      </View>
+          ))}
+        </View>
 
-      {/* Action Buttons */}
-      {!isConnected && !isConnecting && (
-        <TouchableOpacity
-          style={styles.reconnectButton}
-          onPress={connectToDevice}
-        >
-          <MaterialIcons name="refresh" size={24} color={AppConstants.colors.white} />
-          <Text style={styles.reconnectButtonText}>Reconnect</Text>
-        </TouchableOpacity>
+        {/* Spacer for logs toggle button */}
+        <View style={{ height: 80 }} />
+      </ScrollView>
+
+      {/* Logs Toggle Button */}
+      <TouchableOpacity
+        style={styles.logsToggleButton}
+        onPress={() => setShowLogs(!showLogs)}
+      >
+        <MaterialIcons
+          name={showLogs ? "expand-more" : "expand-less"}
+          size={20}
+          color="#ffffff"
+        />
+        <Text style={styles.logsToggleText}>
+          {showLogs ? "Hide" : "Show"} Live Logs
+        </Text>
+        <View style={styles.logCountBadge}>
+          <Text style={styles.logCountText}>{logs.length}</Text>
+        </View>
+      </TouchableOpacity>
+
+      {/* Expandable Logs Window */}
+      {showLogs && (
+        <View style={styles.logsContainer}>
+          <View style={styles.logsHeader}>
+            <View style={styles.logsHeaderLeft}>
+              <MaterialIcons name="terminal" size={18} color="#10b981" />
+              <Text style={styles.logsTitle}>Live Logs</Text>
+            </View>
+            <TouchableOpacity
+              onPress={() => setLogs([])}
+              style={styles.clearButton}
+            >
+              <MaterialIcons name="delete-outline" size={16} color="#ef4444" />
+              <Text style={styles.clearButtonText}>Clear</Text>
+            </TouchableOpacity>
+          </View>
+          <ScrollView
+            ref={scrollViewRef}
+            style={styles.logsBox}
+            showsVerticalScrollIndicator={false}
+          >
+            {logs.length === 0 ? (
+              <View style={styles.emptyLogsContainer}>
+                <MaterialIcons
+                  name="hourglass-empty"
+                  size={24}
+                  color="#6b7280"
+                />
+                <Text style={styles.emptyLogs}>Waiting for data...</Text>
+              </View>
+            ) : (
+              logs.map((log) => {
+                const logIcon = getLogIcon(log.type);
+                return (
+                  <View key={log.id} style={styles.logEntry}>
+                    <View style={styles.logHeader}>
+                      <MaterialIcons
+                        name={logIcon.name as any}
+                        size={12}
+                        color={logIcon.color}
+                      />
+                      <Text style={styles.logTime}>{log.timestamp}</Text>
+                    </View>
+                    <Text style={[styles.logText, { color: logIcon.color }]}>
+                      {log.message}
+                    </Text>
+                  </View>
+                );
+              })
+            )}
+          </ScrollView>
+        </View>
       )}
     </View>
   );
@@ -561,180 +496,295 @@ const DeviceMonitor: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: AppConstants.colors.background,
+    backgroundColor: "#f8fafc",
   },
   header: {
-    backgroundColor: AppConstants.colors.error,
-    padding: 16,
-    paddingTop: Platform.OS === 'ios' ? 50 : 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: Theme.colors.primary,
+    paddingTop: 15,
+    paddingBottom: 15,
+    paddingHorizontal: 16,
+    elevation: 4,
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
   },
   backButton: {
-    marginRight: 16,
+    width: 40,
+    height: 40,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  headerCenter: {
+    flex: 1,
+    alignItems: "center",
   },
   headerTitle: {
-    flex: 1,
     fontSize: 20,
-    fontWeight: 'bold',
-    color: AppConstants.colors.white,
+    fontWeight: "bold",
+    color: "#ffffff",
   },
-  card: {
-    backgroundColor: AppConstants.colors.white,
-    borderRadius: 12,
+  deviceCard: {
+    backgroundColor: "#ffffff",
+    marginHorizontal: 16,
+    marginTop: 16,
+    marginBottom: 12,
+    borderRadius: 16,
     padding: 16,
-    margin: 16,
-    marginBottom: 8,
-    shadowColor: '#000',
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
   },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
+  deviceCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 12,
   },
-  cardTitle: {
+  deviceIconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: Theme.colors.primary + "15",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
+  deviceInfo: {
+    flex: 1,
+  },
+  deviceName: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: AppConstants.colors.secondary,
+    fontWeight: "bold",
+    color: "#1f2937",
+    marginBottom: 4,
   },
   deviceId: {
     fontSize: 12,
-    color: '#666',
+    color: "#6b7280",
+    fontFamily: "monospace",
+  },
+  statusRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
   },
   statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f0f0f0',
+    flexDirection: "row",
+    alignItems: "center",
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 16,
+    borderRadius: 20,
+    gap: 6,
   },
   statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginRight: 6,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#ffffff",
   },
   statusText: {
+    color: "#ffffff",
+    fontWeight: "600",
     fontSize: 12,
-    fontWeight: '600',
-    color: AppConstants.colors.secondary,
   },
-  statusGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginTop: 12,
+  progressBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#eff6ff",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    gap: 6,
   },
-  statusItem: {
-    width: '50%',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  statusLabel: {
+  progressText: {
+    color: "#3b82f6",
+    fontWeight: "600",
     fontSize: 12,
-    color: '#666',
-    marginTop: 8,
   },
-  statusValue: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: AppConstants.colors.secondary,
-    marginTop: 4,
-  },
-  statusSubtext: {
-    fontSize: 10,
-    color: '#999',
-    marginTop: 2,
-  },
-  infoRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8,
-    borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
-  },
-  infoLabel: {
-    fontSize: 12,
-    color: '#666',
-    fontWeight: '500',
-  },
-  infoValue: {
-    fontSize: 12,
-    color: AppConstants.colors.secondary,
-    fontWeight: '600',
+  stepsContainer: {
     flex: 1,
-    textAlign: 'right',
+    paddingHorizontal: 16,
   },
-  notificationsCard: {
-    flex: 1,
-    marginBottom: 16,
-  },
-  notificationsHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
     marginBottom: 12,
+    marginTop: 4,
+    gap: 8,
   },
-  notificationsList: {
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: Theme.colors.primary,
+  },
+  card: {
+    backgroundColor: "#ffffff",
+    borderRadius: 16,
+    padding: 16,
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  stepRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 12,
+  },
+  stepDivider: {
+    height: 1,
+    backgroundColor: "#f3f4f6",
+    marginVertical: 4,
+  },
+  stepLeft: {
+    flexDirection: "row",
+    alignItems: "center",
     flex: 1,
   },
-  emptyNotifications: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 40,
+  iconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
   },
-  emptyText: {
+  stepLabel: {
     fontSize: 14,
-    color: '#999',
-    marginTop: 12,
-  },
-  notificationItem: {
-    flexDirection: 'row',
-    padding: 12,
-    marginBottom: 8,
-    backgroundColor: '#f9f9f9',
-    borderRadius: 8,
-    borderLeftWidth: 3,
-    borderLeftColor: '#ddd',
-  },
-  importantNotification: {
-    backgroundColor: '#FFF3E0',
-    borderLeftColor: '#FF9800',
-  },
-  notificationContent: {
     flex: 1,
-    marginLeft: 12,
   },
-  notificationTime: {
-    fontSize: 10,
-    color: '#999',
+  stepValue: {
+    fontWeight: "600",
+    fontSize: 13,
+    marginLeft: 8,
+  },
+  logsToggleButton: {
+    position: "absolute",
+    bottom: 16,
+    left: 16,
+    right: 16,
+    backgroundColor: Theme.colors.primary,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 14,
+    borderRadius: 12,
+    elevation: 4,
+    shadowColor: "#000",
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    gap: 8,
+  },
+  logsToggleText: {
+    color: "#ffffff",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  logCountBadge: {
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+    marginLeft: 4,
+  },
+  logCountText: {
+    color: "#ffffff",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  logsContainer: {
+    position: "absolute",
+    bottom: 68,
+    left: 16,
+    right: 16,
+    height: 240,
+    backgroundColor: "#1f2937",
+    borderRadius: 16,
+    paddingTop: 12,
+    paddingHorizontal: 16,
+    elevation: 8,
+    shadowColor: "#000",
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: -4 },
+  },
+  logsHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  logsHeaderLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  logsTitle: {
+    color: "#10b981",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  clearButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#374151",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  clearButtonText: {
+    color: "#ef4444",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  logsBox: {
+    flex: 1,
+    backgroundColor: "#111827",
+    borderRadius: 10,
+    padding: 10,
+  },
+  logEntry: {
+    marginBottom: 10,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#374151",
+  },
+  logHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
     marginBottom: 4,
   },
-  notificationMessage: {
-    fontSize: 14,
-    color: AppConstants.colors.secondary,
+  logText: {
+    fontSize: 11,
+    fontFamily: "monospace",
+    lineHeight: 16,
   },
-  reconnectButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: AppConstants.colors.error,
-    padding: 16,
-    margin: 16,
-    borderRadius: 12,
+  logTime: {
+    color: "#9ca3af",
+    fontSize: 10,
+    fontFamily: "monospace",
   },
-  reconnectButtonText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: AppConstants.colors.white,
-    marginLeft: 8,
+  emptyLogsContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 40,
+    gap: 10,
+  },
+  emptyLogs: {
+    color: "#6b7280",
+    fontSize: 13,
+    fontStyle: "italic",
   },
 });
 
