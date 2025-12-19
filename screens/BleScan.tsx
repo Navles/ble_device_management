@@ -1,3 +1,4 @@
+// screens/BleScan.tsx
 import { router } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -5,94 +6,69 @@ import {
   Button,
   FlatList,
   Modal,
-  PermissionsAndroid,
-  Platform,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
 import { Device as BLEDevice, BleManager } from "react-native-ble-plx";
-
 import DataServices from "../api/Services";
 import AppConstants from "../app/utlis/AppConstants";
 import { Device } from "../types/types";
 
-/* ✅ SINGLE GLOBAL BLE MANAGER (DO NOT DESTROY) */
-const BLE_MANAGER = new BleManager();
-
 const BleScan: React.FC = () => {
-  const manager = BLE_MANAGER;
-
+  const [manager] = useState<BleManager>(() => new BleManager());
   const [devices, setDevices] = useState<BLEDevice[]>([]);
-  const [isScanning, setIsScanning] = useState(false);
-  const [clickEnabled, setClickEnabled] = useState(false);
-  const [showPopup, setShowPopup] = useState(false);
-  const [bluetoothOffPopup, setBluetoothOffPopup] = useState(false);
-
+  const [isScanning, setIsScanning] = useState<boolean>(false);
+  const [clickEnabled, setClickEnabled] = useState<boolean>(true); // Changed to true by default
+  const [showPopup, setShowPopup] = useState<boolean>(false);
   const [selectedDevice, setSelectedDevice] = useState<BLEDevice | null>(null);
   const [deviceDetails, setDeviceDetails] = useState<Device | null>(null);
+  const [bluetoothOffPopup, setBluetoothOffPopup] = useState<boolean>(false);
 
-  const hasNavigated = useRef(false);
-  const scanTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hasNavigated = useRef<boolean>(false);
 
-  /* ✅ ANDROID PERMISSIONS */
-  const requestBlePermissions = async () => {
-    if (Platform.OS === "android") {
-      await PermissionsAndroid.requestMultiple([
-        PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
-        PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
-        PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-      ]);
-    }
-  };
-
-  /* ✅ BLUETOOTH STATE LISTENER */
   useEffect(() => {
-    requestBlePermissions();
+    hasNavigated.current = false;
+    setShowPopup(false);
+  }, []);
 
+  useEffect(() => {
     const subscription = manager.onStateChange((state) => {
-      console.log("Bluetooth state:", state);
-
       if (state === "PoweredOn") {
+        console.log("Bluetooth is powered on");
         setBluetoothOffPopup(false);
-      }
-
-      if (state === "PoweredOff") {
-        setBluetoothOffPopup(true);
-        Alert.alert(
-          "Bluetooth is Off",
-          AppConstants.messages.error.bluetoothOff
-        );
+      } else {
+        console.log(`Bluetooth state: ${state}`);
+        if (state === "PoweredOff") {
+          setBluetoothOffPopup(true);
+          Alert.alert(
+            "Bluetooth is Off",
+            AppConstants.messages.error.bluetoothOff,
+            [
+              {
+                text: "OK",
+                onPress: () => {
+                  setBluetoothOffPopup(false);
+                },
+              },
+            ]
+          );
+        }
       }
     }, true);
 
     return () => {
       subscription.remove();
-      if (scanTimeoutRef.current) {
-        clearTimeout(scanTimeoutRef.current);
-        scanTimeoutRef.current = null;
-      }
+      manager.destroy();
     };
-  }, []);
+  }, [manager]);
 
-  /* ✅ ENSURE BLUETOOTH BEFORE SCAN */
-  const ensureBluetoothAndScan = () => {
-    const sub = manager.onStateChange((state) => {
-      if (state === "PoweredOn") {
-        sub.remove();
-        startScanInternal();
-      }
-    }, true);
-  };
-
-  /* ✅ MAIN SCAN LOGIC */
-  const startScanInternal = () => {
-    if (isScanning) return;
-
+  const startScan = (): void => {
+    console.log("Starting BLE scan...");
     setDevices([]);
     setIsScanning(true);
-    setClickEnabled(false);
+    setClickEnabled(false); // Disable during scan
     setShowPopup(false);
     hasNavigated.current = false;
 
@@ -100,6 +76,7 @@ const BleScan: React.FC = () => {
       if (error) {
         console.error("Scan error:", error);
         setIsScanning(false);
+        setClickEnabled(true); // Re-enable on error
         return;
       }
 
@@ -107,50 +84,136 @@ const BleScan: React.FC = () => {
         device?.name &&
         device.name.startsWith(AppConstants.bluetooth.devicePrefix)
       ) {
-        setDevices((prev) => {
-          if (prev.some((d) => d.id === device.id)) return prev;
-          return [...prev, device];
+        console.log("Found DIC device:", device.name, device.id);
+
+        setDevices((prevDevices) => {
+          const updatedDevices = [...prevDevices, device].filter(
+            (d, index, self) => index === self.findIndex((t) => t.id === d.id)
+          );
+
+          if (updatedDevices.length > 1 && !hasNavigated.current) {
+            hasNavigated.current = true;
+            setShowPopup(true);
+
+            setTimeout(() => {
+              setShowPopup(false);
+              router.back();
+            }, AppConstants.timeouts.popupDuration);
+          }
+
+          return updatedDevices;
         });
       }
     });
 
-    /* ✅ AUTO STOP SCAN */
-    scanTimeoutRef.current = setTimeout(() => {
+    // Stop scan after 10 seconds
+    setTimeout(() => {
+      console.log("Stopping scan...");
       manager.stopDeviceScan();
       setIsScanning(false);
-      setClickEnabled(true);
+      setClickEnabled(true); // Enable clicks after scan
     }, AppConstants.timeouts.scanDuration);
   };
 
-  /* ✅ DEVICE CLICK */
-  const handleDeviceClick = async (device: BLEDevice) => {
-    if (!clickEnabled) return;
+  const handleDeviceClick = async (device: BLEDevice): Promise<void> => {
+    console.log("Device clicked:", device.name, device.id);
+
+    if (!clickEnabled) {
+      console.log("Click ignored - not enabled yet");
+      return;
+    }
+
+    setClickEnabled(false); // Prevent multiple taps
+
+    // ⚠️ We'll proceed WITHOUT waiting for API success — always show 4 options
+    // But we still *try* to fetch details (for Details screen), with fallbacks
+
+    let deviceData: Device | null = null;
 
     try {
+      console.log("Fetching device details from API...");
       const apiResponse = await DataServices.fetchDeviceUsingDeviceId(
         device.id
       );
+      console.log("API Response:", apiResponse);
 
-      if (apiResponse.statusCode === 200) {
-        const deviceData = apiResponse.response.body[0];
-
-        setSelectedDevice(device);
+      if (
+        apiResponse.statusCode === 200 &&
+        apiResponse.response?.body?.length > 0
+      ) {
+        deviceData = apiResponse.response.body[0];
         setDeviceDetails(deviceData);
-
-        router.push({
-          pathname: "./DeviceDetails",
-          params: {
-            deviceName: deviceData?.deviceName ?? "Unnamed Device",
-            deviceId: deviceData?.deviceId,
-            latitude: AppConstants.messages.info.fetchingLocation,
-            longitude: AppConstants.messages.info.fetchingLocation,
-            deviceCode: deviceData?.deviceCode,
-          },
-        });
+      } else {
+        console.log("Device not found in DB; using fallback data");
       }
-    } catch (error) {
-      console.error("Device fetch error:", error);
+    } catch (error: any) {
+      console.error("Error fetching device details (non-fatal):", error);
+      // Proceed anyway — don't block UI
     }
+
+    // ✅ Always show 4 options
+    Alert.alert(
+      "Device Options",
+      `Device: ${device.name || "Unknown"}\nID: ${device.id}`,
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+          onPress: () => setClickEnabled(true),
+        },
+        {
+          text: "Monitor",
+          onPress: () => {
+            router.push({
+              pathname: "/DeviceMonitor",
+              params: {
+                deviceId: device.id,
+                deviceName: device.name || "Unknown Device",
+              },
+            });
+            setClickEnabled(true);
+          },
+        },
+        // {
+        //   text: "Diagnostics",
+        //   onPress: () => {
+        //     router.push({
+        //       pathname: "/DeviceDiagnostics",
+        //       params: {
+        //         deviceId: device.id,
+        //         deviceName: device.name || "Unknown Device",
+        //       },
+        //     });
+        //     setClickEnabled(true);
+        //   },
+        // },
+        {
+          text: "Details",
+          onPress: () => {
+            // Use fetched data if available, else fallback
+            const name =
+              deviceData?.deviceName || device.name || "Unnamed Device";
+            const id = deviceData?.deviceId || device.id;
+            const code = deviceData?.deviceCode || device.id || "N/A";
+
+            router.push({
+              pathname: "/DeviceDetails",
+              params: {
+                deviceName: name,
+                deviceId: id,
+                deviceCode: code,
+                latitude: AppConstants.messages.info.fetchingLocation,
+                longitude: AppConstants.messages.info.fetchingLocation,
+              },
+            });
+            setClickEnabled(true);
+          },
+        },
+      ],
+      {
+        onDismiss: () => setClickEnabled(true),
+      }
+    );
   };
 
   return (
@@ -163,18 +226,22 @@ const BleScan: React.FC = () => {
           1. To wake up the device, gently rub a magnet along its side.
         </Text>
         <Text style={styles.noteText}>
-          2. Please ensure Bluetooth is turned ON.
+          2. Please ensure that Bluetooth is turned on in your device.
         </Text>
       </View>
 
       <Button
-        title={isScanning ? "Scanning..." : "Start Scan"}
-        onPress={ensureBluetoothAndScan}
+        title={isScanning ? AppConstants.messages.info.scanning : "Start Scan"}
+        onPress={startScan}
         disabled={isScanning}
       />
 
-      {/* ✅ MULTIPLE DEVICE POPUP */}
-      <Modal visible={showPopup} transparent animationType="fade">
+      <Modal
+        visible={showPopup}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowPopup(false)}
+      >
         <View style={styles.backdrop}>
           <View style={styles.overlay}>
             <Text style={styles.popupText}>
@@ -187,6 +254,17 @@ const BleScan: React.FC = () => {
         </View>
       </Modal>
 
+      {devices.length > 0 && (
+        <View style={styles.infoContainer}>
+          <Text style={styles.infoText}>
+            Found {devices.length} device{devices.length > 1 ? "s" : ""}
+          </Text>
+          {!isScanning && (
+            <Text style={styles.infoSubtext}>Tap a device to view options</Text>
+          )}
+        </View>
+      )}
+
       <FlatList
         data={devices}
         keyExtractor={(item) => item.id}
@@ -195,19 +273,47 @@ const BleScan: React.FC = () => {
             style={[
               styles.deviceItem,
               {
-                backgroundColor: clickEnabled
-                  ? AppConstants.colors.error
-                  : "gray",
+                backgroundColor:
+                  clickEnabled && !isScanning
+                    ? AppConstants.colors.error
+                    : "#999",
+                opacity: clickEnabled && !isScanning ? 1 : 0.6,
               },
             ]}
-            disabled={!clickEnabled}
-            onPress={() => handleDeviceClick(item)}
+            onPress={() => {
+              console.log("Device tapped:", item.name);
+              if (clickEnabled && !isScanning) {
+                handleDeviceClick(item);
+              } else {
+                console.log("Click ignored - scanning or disabled");
+              }
+            }}
+            disabled={!clickEnabled || isScanning}
           >
-            <Text style={styles.deviceText}>
-              {item.name || "Unnamed Device"}
-            </Text>
-            <Text style={styles.deviceText}>ID: {item.id}</Text>
+            <View style={styles.deviceContent}>
+              <Text style={styles.deviceText}>
+                {item.name || "Unnamed Device"}
+              </Text>
+              <Text style={styles.deviceIdText}>ID: {item.id}</Text>
+              {item.rssi && (
+                <Text style={styles.deviceRssiText}>
+                  Signal: {item.rssi} dBm
+                </Text>
+              )}
+            </View>
+            {clickEnabled && !isScanning && (
+              <Text style={styles.tapHintText}>Tap to select</Text>
+            )}
           </TouchableOpacity>
+        )}
+        ListEmptyComponent={() => (
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyText}>
+              {isScanning
+                ? "Scanning for devices..."
+                : 'No devices found. Press "Start Scan" to begin.'}
+            </Text>
+          </View>
         )}
       />
     </View>
@@ -218,7 +324,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 20,
-    backgroundColor: "#f8f9fa",
+    backgroundColor: AppConstants.colors.background,
   },
   title: {
     fontSize: 24,
@@ -226,19 +332,38 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     color: "black",
   },
-  backdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
   deviceItem: {
     padding: 15,
     marginVertical: 10,
     borderRadius: 8,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  deviceContent: {
+    flex: 1,
   },
   deviceText: {
-    color: "white",
+    color: AppConstants.colors.white,
+    fontSize: 16,
+    fontWeight: "bold",
+    marginBottom: 4,
+  },
+  deviceIdText: {
+    color: AppConstants.colors.white,
+    fontSize: 12,
+    opacity: 0.9,
+  },
+  deviceRssiText: {
+    color: AppConstants.colors.white,
+    fontSize: 12,
+    opacity: 0.8,
+    marginTop: 2,
+  },
+  tapHintText: {
+    color: AppConstants.colors.white,
+    fontSize: 12,
+    fontStyle: "italic",
   },
   overlay: {
     width: "80%",
@@ -247,6 +372,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     borderRadius: 10,
+    backgroundColor: AppConstants.colors.white,
+  },
+  backdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
   },
   popupText: {
     fontSize: 18,
@@ -256,12 +388,42 @@ const styles = StyleSheet.create({
     color: "black",
   },
   noteContainer: {
-    marginTop: 10, // Add some spacing between the title and the note
+    marginTop: 10,
+    marginBottom: 20,
   },
   noteText: {
     fontSize: 14,
-    color: "#555", // Use a softer color for the note
-    marginBottom: 5, // Add spacing between lines
+    color: "#555",
+    marginBottom: 5,
+  },
+  infoContainer: {
+    marginTop: 15,
+    marginBottom: 10,
+    padding: 10,
+    backgroundColor: "#E8F5E9",
+    borderRadius: 8,
+  },
+  infoText: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: AppConstants.colors.secondary,
+    textAlign: "center",
+  },
+  infoSubtext: {
+    fontSize: 12,
+    color: "#666",
+    textAlign: "center",
+    marginTop: 5,
+  },
+  emptyContainer: {
+    marginTop: 50,
+    padding: 20,
+    alignItems: "center",
+  },
+  emptyText: {
+    fontSize: 16,
+    color: "#666",
+    textAlign: "center",
   },
 });
 

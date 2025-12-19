@@ -1,3 +1,4 @@
+// AppConstants.tsx - Centralized constants for the application
 export default {
   // Redux action types
   address: 'address',
@@ -38,6 +39,7 @@ export default {
       deviceCreated: 'Device created successfully',
       deviceUpdated: 'Device updated successfully',
       imageUploaded: 'Image uploaded successfully',
+      diagnosticsComplete: 'Diagnostics completed successfully',
     },
     error: {
       loginFailed: 'Login failed. Please check your credentials.',
