@@ -69,13 +69,6 @@ export default function RootLayout() {
           }}
         />
         <Stack.Screen
-          name="DeviceDiagnostics"
-          options={{
-            headerShown: true,
-            title: "Device Diagnostics",
-          }}
-        />
-        <Stack.Screen
           name="DeviceMonitor"
           options={{
             headerShown: true,

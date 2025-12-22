@@ -257,6 +257,8 @@ const DeviceRecords: React.FC = () => {
                 borderRadius: 5,
                 paddingHorizontal: 10,
                 height: 40,
+               
+                backgroundColor:"white"
               }}
               placeholder="Search by Device ID"
               value={searchQuery}
