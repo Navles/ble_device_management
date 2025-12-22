@@ -69,6 +69,20 @@ export default function RootLayout() {
           }}
         />
         <Stack.Screen
+          name="DeviceConfig"
+          options={{
+            headerShown: true,
+            title: "Device Configuration",
+            headerStyle: {
+              backgroundColor: AppConstants.colors.primary,
+            },
+            headerTintColor: AppConstants.colors.white,
+            headerTitleStyle: {
+              fontWeight: "bold",
+            },
+          }}
+        />
+        <Stack.Screen
           name="DeviceMonitor"
           options={{
             headerShown: true,
