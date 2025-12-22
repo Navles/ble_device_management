@@ -16,10 +16,11 @@ import {
   View,
 } from "react-native";
 import { Device as BLEDevice } from "react-native-ble-plx";
-
 import DataServices from "../api/Services";
 import AppConstants from "../app/utlis/AppConstants";
 import manager from "../ble/bleManager";
+import GlobalLoader from "../components/GlobalLoader";
+import { useLoading } from "../hooks/useLoading";
 import { Device } from "../types/types";
 
 const { width } = Dimensions.get("screen");
@@ -32,6 +33,8 @@ const BleScan: React.FC = () => {
   const [bluetoothEnabled, setBluetoothEnabled] = useState(false);
   const [permissionsGranted, setPermissionsGranted] = useState(false);
   const [isInitializing, setIsInitializing] = useState(true);
+  const { isLoading, loadingMessage, withLoader, showLoader, hideLoader } =
+    useLoading();
 
   const hasNavigated = useRef(false);
   const scanTimeoutRef = useRef<number | null>(undefined);
@@ -348,209 +351,212 @@ const BleScan: React.FC = () => {
   }
 
   return (
-    <View style={styles.container}>
-      {/* Status Card */}
-      <View style={styles.statusCard}>
-        <View style={styles.statusRow}>
-          <View style={styles.statusItem}>
-            <MaterialIcons
-              name="bluetooth"
-              size={20}
-              color={bluetoothEnabled ? "#22c55e" : "#ef4444"}
-            />
-            <Text
-              style={[
-                styles.statusText,
-                { color: bluetoothEnabled ? "#22c55e" : "#ef4444" },
-              ]}
-            >
-              Bluetooth {bluetoothEnabled ? "ON" : "OFF"}
-            </Text>
-          </View>
-          <View style={styles.statusItem}>
-            <MaterialIcons
-              name={permissionsGranted ? "check-circle" : "cancel"}
-              size={20}
-              color={permissionsGranted ? "#22c55e" : "#ef4444"}
-            />
-            <Text
-              style={[
-                styles.statusText,
-                { color: permissionsGranted ? "#22c55e" : "#ef4444" },
-              ]}
-            >
-              Permissions {permissionsGranted ? "Granted" : "Required"}
-            </Text>
-          </View>
-        </View>
-      </View>
-
-      {/* Instructions Card */}
-      <View style={styles.instructionsCard}>
-        <View style={styles.instructionHeader}>
-          <MaterialIcons name="info" size={20} color="#3b82f6" />
-          <Text style={styles.instructionTitle}>How to Connect</Text>
-        </View>
-        <View style={styles.instructionItem}>
-          <View style={styles.stepBadge}>
-            <Text style={styles.stepNumber}>1</Text>
-          </View>
-          <Text style={styles.instructionText}>
-            Gently rub a magnet along the device's side to wake it up
-          </Text>
-        </View>
-        <View style={styles.instructionItem}>
-          <View style={styles.stepBadge}>
-            <Text style={styles.stepNumber}>2</Text>
-          </View>
-          <Text style={styles.instructionText}>
-            Ensure Bluetooth is turned ON
-          </Text>
-        </View>
-        <View style={styles.instructionItem}>
-          <View style={styles.stepBadge}>
-            <Text style={styles.stepNumber}>3</Text>
-          </View>
-          <Text style={styles.instructionText}>
-            Tap "Start Scan" button below
-          </Text>
-        </View>
-      </View>
-
-      {/* Scan Button */}
-      <TouchableOpacity
-        style={[
-          styles.scanButton,
-          (isScanning || !bluetoothEnabled || !permissionsGranted) &&
-            styles.scanButtonDisabled,
-        ]}
-        onPress={startScan}
-        disabled={isScanning || !bluetoothEnabled || !permissionsGranted}
-      >
-        {isScanning ? (
-          <>
-            <ActivityIndicator color="#ffffff" size="small" />
-            <Text style={styles.scanButtonText}>Scanning...</Text>
-          </>
-        ) : (
-          <>
-            <MaterialIcons name="search" size={24} color="#ffffff" />
-            <Text style={styles.scanButtonText}>Start Scan</Text>
-          </>
-        )}
-      </TouchableOpacity>
-
-      {/* Devices Count */}
-      {devices.length > 0 && (
-        <View style={styles.devicesHeader}>
-          <MaterialIcons name="devices" size={20} color="#3b82f6" />
-          <Text style={styles.devicesCount}>
-            {devices.length} device{devices.length > 1 ? "s" : ""} found
-          </Text>
-        </View>
-      )}
-
-      {/* Multiple Devices Popup */}
-      <Modal visible={showPopup} transparent animationType="fade">
-        <View style={styles.backdrop}>
-          <View style={styles.popupCard}>
-            <MaterialIcons name="info" size={48} color="#3b82f6" />
-            <Text style={styles.popupTitle}>Multiple Devices Detected</Text>
-            <Text style={styles.popupText}>
-              {AppConstants.messages.info.multipleDevicesDetected}
-            </Text>
-            <Text style={styles.popupSubtext}>
-              {AppConstants.messages.info.pleaseWait}
-            </Text>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Devices List */}
-      <FlatList
-        data={devices}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContainer}
-        renderItem={({ item }) => {
-          const signalColor = getSignalColor();
-          const signalBars = getSignalBars();
-
-          return (
-            <TouchableOpacity
-              style={styles.deviceCard}
-              onPress={() => handleDeviceClick(item)}
-              disabled={!clickEnabled}
-              activeOpacity={0.7}
-            >
-              <View style={styles.deviceHeader}>
-                <View style={styles.deviceIconContainer}>
-                  <MaterialIcons
-                    name="bluetooth-connected"
-                    size={28}
-                    color="#3b82f6"
-                  />
-                </View>
-                <View style={styles.deviceInfo}>
-                  <Text style={styles.deviceName}>
-                    {item.name || "Unnamed Device"}
-                  </Text>
-                  <Text style={styles.deviceId}>{item.id}</Text>
-                </View>
-              </View>
-
-              {item.rssi && (
-                <View style={styles.signalContainer}>
-                  <View style={styles.signalBars}>
-                    {[1, 2, 3, 4].map((bar) => (
-                      <View
-                        key={bar}
-                        style={[
-                          styles.signalBar,
-                          {
-                            height: bar * 4,
-                            backgroundColor:
-                              bar <= signalBars ? signalColor : "#e5e7eb",
-                          },
-                        ]}
-                      />
-                    ))}
-                  </View>
-                  <Text style={[styles.signalText, { color: signalColor }]}>
-                    {item.rssi} dBm
-                  </Text>
-                </View>
-              )}
-
+    <>
+      <GlobalLoader visible={isLoading} message={loadingMessage} />
+      <View style={styles.container}>
+        {/* Status Card */}
+        <View style={styles.statusCard}>
+          <View style={styles.statusRow}>
+            <View style={styles.statusItem}>
               <MaterialIcons
-                name="chevron-right"
-                size={24}
-                color="#9ca3af"
-                style={styles.chevron}
+                name="bluetooth"
+                size={20}
+                color={bluetoothEnabled ? "#22c55e" : "#ef4444"}
               />
-            </TouchableOpacity>
-          );
-        }}
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <MaterialIcons
-              name={isScanning ? "search" : "bluetooth-searching"}
-              size={64}
-              color="#d1d5db"
-            />
-            <Text style={styles.emptyTitle}>
-              {isScanning ? "Scanning..." : "No Devices Found"}
-            </Text>
-            <Text style={styles.emptyText}>
-              {isScanning
-                ? "Looking for nearby devices"
-                : bluetoothEnabled && permissionsGranted
-                ? 'Press "Start Scan" to search for devices'
-                : "Please enable Bluetooth and grant permissions"}
+              <Text
+                style={[
+                  styles.statusText,
+                  { color: bluetoothEnabled ? "#22c55e" : "#ef4444" },
+                ]}
+              >
+                Bluetooth {bluetoothEnabled ? "ON" : "OFF"}
+              </Text>
+            </View>
+            <View style={styles.statusItem}>
+              <MaterialIcons
+                name={permissionsGranted ? "check-circle" : "cancel"}
+                size={20}
+                color={permissionsGranted ? "#22c55e" : "#ef4444"}
+              />
+              <Text
+                style={[
+                  styles.statusText,
+                  { color: permissionsGranted ? "#22c55e" : "#ef4444" },
+                ]}
+              >
+                Permissions {permissionsGranted ? "Granted" : "Required"}
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Instructions Card */}
+        <View style={styles.instructionsCard}>
+          <View style={styles.instructionHeader}>
+            <MaterialIcons name="info" size={20} color="#3b82f6" />
+            <Text style={styles.instructionTitle}>How to Connect</Text>
+          </View>
+          <View style={styles.instructionItem}>
+            <View style={styles.stepBadge}>
+              <Text style={styles.stepNumber}>1</Text>
+            </View>
+            <Text style={styles.instructionText}>
+              Gently rub a magnet along the device's side to wake it up
             </Text>
           </View>
-        }
-      />
-    </View>
+          <View style={styles.instructionItem}>
+            <View style={styles.stepBadge}>
+              <Text style={styles.stepNumber}>2</Text>
+            </View>
+            <Text style={styles.instructionText}>
+              Ensure Bluetooth is turned ON
+            </Text>
+          </View>
+          <View style={styles.instructionItem}>
+            <View style={styles.stepBadge}>
+              <Text style={styles.stepNumber}>3</Text>
+            </View>
+            <Text style={styles.instructionText}>
+              Tap "Start Scan" button below
+            </Text>
+          </View>
+        </View>
+
+        {/* Scan Button */}
+        <TouchableOpacity
+          style={[
+            styles.scanButton,
+            (isScanning || !bluetoothEnabled || !permissionsGranted) &&
+              styles.scanButtonDisabled,
+          ]}
+          onPress={startScan}
+          disabled={isScanning || !bluetoothEnabled || !permissionsGranted}
+        >
+          {isScanning ? (
+            <>
+              <ActivityIndicator color="#ffffff" size="small" />
+              <Text style={styles.scanButtonText}>Scanning...</Text>
+            </>
+          ) : (
+            <>
+              <MaterialIcons name="search" size={24} color="#ffffff" />
+              <Text style={styles.scanButtonText}>Start Scan</Text>
+            </>
+          )}
+        </TouchableOpacity>
+
+        {/* Devices Count */}
+        {devices.length > 0 && (
+          <View style={styles.devicesHeader}>
+            <MaterialIcons name="devices" size={20} color="#3b82f6" />
+            <Text style={styles.devicesCount}>
+              {devices.length} device{devices.length > 1 ? "s" : ""} found
+            </Text>
+          </View>
+        )}
+
+        {/* Multiple Devices Popup */}
+        <Modal visible={showPopup} transparent animationType="fade">
+          <View style={styles.backdrop}>
+            <View style={styles.popupCard}>
+              <MaterialIcons name="info" size={48} color="#3b82f6" />
+              <Text style={styles.popupTitle}>Multiple Devices Detected</Text>
+              <Text style={styles.popupText}>
+                {AppConstants.messages.info.multipleDevicesDetected}
+              </Text>
+              <Text style={styles.popupSubtext}>
+                {AppConstants.messages.info.pleaseWait}
+              </Text>
+            </View>
+          </View>
+        </Modal>
+
+        {/* Devices List */}
+        <FlatList
+          data={devices}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.listContainer}
+          renderItem={({ item }) => {
+            const signalColor = getSignalColor();
+            const signalBars = getSignalBars();
+
+            return (
+              <TouchableOpacity
+                style={styles.deviceCard}
+                onPress={() => handleDeviceClick(item)}
+                disabled={!clickEnabled}
+                activeOpacity={0.7}
+              >
+                <View style={styles.deviceHeader}>
+                  <View style={styles.deviceIconContainer}>
+                    <MaterialIcons
+                      name="bluetooth-connected"
+                      size={28}
+                      color="#3b82f6"
+                    />
+                  </View>
+                  <View style={styles.deviceInfo}>
+                    <Text style={styles.deviceName}>
+                      {item.name || "Unnamed Device"}
+                    </Text>
+                    <Text style={styles.deviceId}>{item.id}</Text>
+                  </View>
+                </View>
+
+                {item.rssi && (
+                  <View style={styles.signalContainer}>
+                    <View style={styles.signalBars}>
+                      {[1, 2, 3, 4].map((bar) => (
+                        <View
+                          key={bar}
+                          style={[
+                            styles.signalBar,
+                            {
+                              height: bar * 4,
+                              backgroundColor:
+                                bar <= signalBars ? signalColor : "#e5e7eb",
+                            },
+                          ]}
+                        />
+                      ))}
+                    </View>
+                    <Text style={[styles.signalText, { color: signalColor }]}>
+                      {item.rssi} dBm
+                    </Text>
+                  </View>
+                )}
+
+                <MaterialIcons
+                  name="chevron-right"
+                  size={24}
+                  color="#9ca3af"
+                  style={styles.chevron}
+                />
+              </TouchableOpacity>
+            );
+          }}
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <MaterialIcons
+                name={isScanning ? "search" : "bluetooth-searching"}
+                size={64}
+                color="#d1d5db"
+              />
+              <Text style={styles.emptyTitle}>
+                {isScanning ? "Scanning..." : "No Devices Found"}
+              </Text>
+              <Text style={styles.emptyText}>
+                {isScanning
+                  ? "Looking for nearby devices"
+                  : bluetoothEnabled && permissionsGranted
+                  ? 'Press "Start Scan" to search for devices'
+                  : "Please enable Bluetooth and grant permissions"}
+              </Text>
+            </View>
+          }
+        />
+      </View>
+    </>
   );
 };
 

@@ -13,11 +13,12 @@ import {
   View,
 } from "react-native";
 import { Dropdown } from "react-native-element-dropdown";
-import Spinner from "react-native-loading-spinner-overlay";
 import { Button, DataTable, Text, TextInput } from "react-native-paper";
 import { useDispatch, useSelector } from "react-redux";
 import DataServices from "../api/Services";
 import AppConstants from "../app/utlis/AppConstants";
+import GlobalLoader from "../components/GlobalLoader";
+import { useLoading } from "../hooks/useLoading";
 import { Device, DropdownItem } from "../types/types";
 
 interface RequestData {
@@ -29,6 +30,8 @@ const DeviceRecords: React.FC = () => {
   const { width, height } = Dimensions.get("window");
   const { token } = useSelector((state: RootState) => state.LoginModel);
   const dispatch = useDispatch<any>();
+  const { isLoading, loadingMessage, withLoader, showLoader, hideLoader } =
+    useLoading();
 
   const [items, setItems] = useState<Device[]>([]);
   const [filteredItems, setFilteredItems] = useState<Device[]>([]);
@@ -51,21 +54,19 @@ const DeviceRecords: React.FC = () => {
   const [visible, setVisible] = useState<boolean>(false);
   const [selectedItem, setSelectedItem] = useState<Device | undefined>();
   const [searchQuery, setSearchQuery] = useState<string>("");
-  const [spinnerValue, setSpinnerValue] = useState<boolean>(false);
 
   const HandleAPICall = async (value: RequestData): Promise<void> => {
-    try {
-      setSpinnerValue(true);
-      const apiResponse = await DataServices.getDicDevice(value, token);
-      console.log("apiResponse", apiResponse);
-      setItems(apiResponse.response.body.content);
-      setFilteredItems(apiResponse.response.body.content);
-    } catch (error) {
-      setItems([]);
-      console.error(error);
-    } finally {
-      setSpinnerValue(false);
-    }
+    await withLoader(async () => {
+      try {
+        const apiResponse = await DataServices.getDicDevice(value, token);
+        console.log("apiResponse", apiResponse);
+        setItems(apiResponse.response.body.content);
+        setFilteredItems(apiResponse.response.body.content);
+      } catch (error) {
+        setItems([]);
+        console.error(error);
+      }
+    }, "Fetching device records...");
   };
 
   useEffect(() => {
@@ -92,8 +93,17 @@ const DeviceRecords: React.FC = () => {
     setFilteredItems(filtered);
   }, [searchQuery, items]);
 
-  const handleEdit = (): void => {
+  const handleEdit = async (): Promise<void> => {
     setVisible(false);
+
+    showLoader("Opening device details...");
+
+    if (selectedItem?.config) {
+      await handleConfiguration(selectedItem.config);
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    hideLoader();
 
     router.push({
       pathname: "./DeviceDetails",
@@ -103,15 +113,22 @@ const DeviceRecords: React.FC = () => {
       },
     });
 
-    if (selectedItem?.config) {
-      handleConfiguration(selectedItem.config);
-    }
-
     setSelectedItem(undefined);
   };
 
+  const InfoRow = ({ label, value }: { label: string; value?: string }) => (
+    <View style={styles.infoRow}>
+      <Text style={styles.label}>{label}</Text>
+      <Text style={styles.value} numberOfLines={4}>
+        {value || "-"}
+      </Text>
+    </View>
+  );
+
   return (
     <>
+      <GlobalLoader visible={isLoading} message={loadingMessage} />
+
       <Modal
         visible={visible}
         onDismiss={() => {
@@ -130,116 +147,42 @@ const DeviceRecords: React.FC = () => {
             style={styles.modalContent}
             onPress={(e) => e.stopPropagation()}
           >
-            <View>
-              <Image
-                style={{
-                  width: width / 2,
-                  height: width / 2,
-                  alignSelf: "center",
-                }}
-                resizeMode="cover"
-                source={{
-                  uri: selectedItem?.image || "",
-                }}
-              />
-              <View
-                style={{
-                  marginTop: 20,
-                  width: "95%",
-                  alignSelf: "center",
-                }}
-              >
-                <View style={{ flexDirection: "row" }}>
-                  <Text
-                    variant="titleMedium"
-                    style={{ width: "35%", fontWeight: "500" }}
-                  >
-                    Device Name:
-                  </Text>
-                  <Text
-                    variant="bodyLarge"
-                    style={{ width: "45%" }}
-                    numberOfLines={6}
-                  >
-                    {selectedItem?.deviceName || ""}
-                  </Text>
-                </View>
-                <View style={{ flexDirection: "row" }}>
-                  <Text
-                    variant="titleMedium"
-                    style={{ width: "30%", fontWeight: "500" }}
-                  >
-                    Latitude:{" "}
-                  </Text>
-                  <Text variant="bodyLarge">
-                    {selectedItem?.latitude || ""}
-                  </Text>
-                </View>
-                <View style={{ flexDirection: "row" }}>
-                  <Text
-                    variant="titleMedium"
-                    style={{ width: "30%", fontWeight: "500" }}
-                  >
-                    Longitude:
-                  </Text>
-                  <Text variant="bodyLarge">
-                    {selectedItem?.longitude || ""}
-                  </Text>
-                </View>
-                <View style={{ flexDirection: "row" }}>
-                  <Text
-                    variant="titleMedium"
-                    style={{ fontWeight: "500", width: "30%" }}
-                  >
-                    Address:
-                  </Text>
-                  <Text
-                    variant="bodyLarge"
-                    style={{ width: "65%" }}
-                    numberOfLines={6}
-                  >
-                    {selectedItem?.address || ""}
-                  </Text>
-                </View>
-                <View style={{ flexDirection: "row" }}>
-                  <Text
-                    variant="titleMedium"
-                    style={{ width: "30%", fontWeight: "500" }}
-                  >
-                    Device Info:
-                  </Text>
-                  <Text variant="bodyLarge">
-                    {selectedItem?.deviceId || ""}
-                  </Text>
-                </View>
-              </View>
-              <View
-                style={{
-                  width: width / 1.1,
-                  height: height / 20,
-                  marginTop: 20,
-                  flexDirection: "row",
-                  justifyContent: "space-evenly",
+            {/* Image */}
+            <Image
+              source={{ uri: selectedItem?.image || "" }}
+              resizeMode="cover"
+              style={styles.deviceImage}
+            />
+
+            {/* Info Section */}
+            <View style={styles.infoContainer}>
+              <InfoRow label="Device Name" value={selectedItem?.deviceName} />
+              <InfoRow label="Latitude" value={selectedItem?.latitude} />
+              <InfoRow label="Longitude" value={selectedItem?.longitude} />
+              <InfoRow label="Address" value={selectedItem?.address} />
+              <InfoRow label="Device Info" value={selectedItem?.deviceId} />
+            </View>
+
+            {/* Buttons */}
+            <View style={styles.buttonRow}>
+              <Button
+                mode="outlined"
+                style={styles.button}
+                onPress={() => {
+                  setVisible(false);
+                  setSelectedItem(undefined);
                 }}
               >
-                <Button
-                  mode="contained"
-                  style={{ width: "40%" }}
-                  onPress={() => {
-                    setVisible(false);
-                    setSelectedItem(undefined);
-                  }}
-                >
-                  Close
-                </Button>
-                <Button
-                  mode="contained"
-                  style={{ width: "40%" }}
-                  onPress={handleEdit}
-                >
-                  Edit
-                </Button>
-              </View>
+                Close
+              </Button>
+
+              <Button
+                mode="contained"
+                style={styles.button}
+                onPress={handleEdit}
+              >
+                Edit
+              </Button>
             </View>
           </Pressable>
         </Pressable>
@@ -269,17 +212,11 @@ const DeviceRecords: React.FC = () => {
               paddingHorizontal: width / 30,
             }}
           >
-            <Spinner
-              visible={spinnerValue}
-              textContent={AppConstants.messages.info.loading}
-              textStyle={{ color: AppConstants.colors.white }}
-            />
-
             <TouchableOpacity>
               <Ionicons
                 name="reload-circle"
                 size={width / 10}
-                color={AppConstants.colors.highlight}
+                color={AppConstants.colors.primary}
                 onPress={() => {
                   HandleAPICall({
                     row: rowValue,
@@ -370,7 +307,7 @@ const DeviceRecords: React.FC = () => {
               </DataTable.Title>
             </DataTable.Header>
 
-            {filteredItems?.length === 0 && !spinnerValue ? (
+            {filteredItems?.length === 0 && !isLoading ? (
               <View
                 style={{
                   width: "100%",
@@ -438,16 +375,56 @@ export default DeviceRecords;
 const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    backgroundColor: "rgba(0,0,0,0.5)",
     justifyContent: "center",
     alignItems: "center",
   },
   modalContent: {
     width: "90%",
-    height: "70%",
-    backgroundColor: AppConstants.colors.white,
-    borderRadius: 15,
-    justifyContent: "space-evenly",
-    padding: 10,
+    backgroundColor: "#fff",
+    borderRadius: 20,
+    padding: 16,
+  },
+
+  deviceImage: {
+    width: "100%",
+    height: 180,
+    borderRadius: 12,
+    marginBottom: 16,
+  },
+
+  infoContainer: {
+    gap: 12,
+    marginBottom: 20,
+  },
+
+  infoRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+  },
+
+  label: {
+    width: 110,
+    fontWeight: "600",
+    color: "#333",
+    fontSize: 14,
+  },
+
+  value: {
+    flex: 1,
+    fontSize: 14,
+    color: "#555",
+    lineHeight: 20,
+  },
+
+  buttonRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+
+  button: {
+    flex: 1,
+    borderRadius: 10,
   },
 });

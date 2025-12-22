@@ -1,32 +1,34 @@
+// screens/LoginScreen.tsx (Updated)
 import AppConstants from "@/app/utlis/AppConstants";
 import { showToastFail, showToastSuccess } from "@/app/utlis/ToastConfig";
 import { router } from "expo-router";
 import React, { useState } from "react";
 import {
-    ActivityIndicator,
-    Dimensions,
-    Image,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Dimensions,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { useDispatch } from "react-redux";
+import GlobalLoader from "../components/GlobalLoader";
+import { useLoading } from "../hooks/useLoading";
 
 const logo = require("../assets/images/appLogo.png");
 
 const LoginScreen: React.FC = () => {
   const { width } = Dimensions.get("window");
   const dispatch = useDispatch<any>();
+  const { isLoading, loadingMessage, withLoader } = useLoading();
 
   const [email, setEmail] = useState<string>("");
   const [password, setPassword] = useState<string>("");
-  const [isLoading, setIsLoading] = useState<boolean>(false);
   const [showPassword, setShowPassword] = useState<boolean>(false);
 
   const validateEmail = (email: string): boolean => {
@@ -35,7 +37,6 @@ const LoginScreen: React.FC = () => {
   };
 
   const handleLogin = async (): Promise<void> => {
-    // Basic validation
     if (!email.trim()) {
       showToastFail({
         message: AppConstants.messages.error.invalidEmail,
@@ -63,12 +64,10 @@ const LoginScreen: React.FC = () => {
       return;
     }
 
-    setIsLoading(true);
-
-    // Simple delay to show loading state
-    setTimeout(async () => {
+    await withLoader(async () => {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
       try {
-        // Store a mock token for the session
         const mockToken = "mock-session-token-" + Date.now();
         await dispatch.LoginModel.handleApiToken(mockToken);
 
@@ -78,7 +77,6 @@ const LoginScreen: React.FC = () => {
           position: "bottom",
         });
 
-        // Navigate to MainScreen
         setTimeout(() => {
           router.replace("/(tabs)");
         }, 500);
@@ -89,111 +87,101 @@ const LoginScreen: React.FC = () => {
           visibilityTime: AppConstants.timeouts.toastDuration,
           position: "bottom",
         });
-      } finally {
-        setIsLoading(false);
       }
-    }, 1000);
+    }, "Logging in...");
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
-      <StatusBar
-        backgroundColor={AppConstants.colors.primary}
-        barStyle="light-content"
-      />
-      <ScrollView
-        contentContainerStyle={styles.scrollContainer}
-        keyboardShouldPersistTaps="handled"
+    <>
+      <GlobalLoader visible={isLoading} message={loadingMessage} />
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        <View style={styles.innerContainer}>
-          {/* Logo Section */}
-          <View style={styles.logoContainer}>
-            <Image source={logo} style={styles.logo} resizeMode="contain" />
-          </View>
-
-          {/* Login Form Section */}
-          <View style={styles.formContainer}>
-            <Text style={styles.title}>Login</Text>
-
-            {/* Email Input */}
-            <View style={styles.inputContainer}>
-              <Text style={styles.label}>Email</Text>
-              <TextInput
-                style={styles.input}
-                value={email}
-                onChangeText={setEmail}
-                placeholder="Enter your email"
-                placeholderTextColor="#999"
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoComplete="email"
-                editable={!isLoading}
-              />
+        <StatusBar
+          backgroundColor={AppConstants.colors.primary}
+          barStyle="light-content"
+        />
+        <ScrollView
+          contentContainerStyle={styles.scrollContainer}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.innerContainer}>
+            <View style={styles.logoContainer}>
+              <Image source={logo} style={styles.logo} resizeMode="contain" />
             </View>
 
-            {/* Password Input */}
-            <View style={styles.inputContainer}>
-              <Text style={styles.label}>Password</Text>
-              <View style={styles.passwordContainer}>
+            <View style={styles.formContainer}>
+              <Text style={styles.title}>Login</Text>
+
+              <View style={styles.inputContainer}>
+                <Text style={styles.label}>Email</Text>
                 <TextInput
-                  style={styles.passwordInput}
-                  value={password}
-                  onChangeText={setPassword}
-                  placeholder="Enter your password"
+                  style={styles.input}
+                  value={email}
+                  onChangeText={setEmail}
+                  placeholder="Enter your email"
                   placeholderTextColor="#999"
-                  secureTextEntry={!showPassword}
+                  keyboardType="email-address"
                   autoCapitalize="none"
+                  autoComplete="email"
                   editable={!isLoading}
                 />
-                <TouchableOpacity
-                  style={styles.eyeButton}
-                  onPress={() => setShowPassword(!showPassword)}
-                  disabled={isLoading}
-                >
-                  <Text style={styles.eyeIcon}>
-                    {showPassword ? "👁️" : "👁️‍🗨️"}
-                  </Text>
-                </TouchableOpacity>
               </View>
+
+              <View style={styles.inputContainer}>
+                <Text style={styles.label}>Password</Text>
+                <View style={styles.passwordContainer}>
+                  <TextInput
+                    style={styles.passwordInput}
+                    value={password}
+                    onChangeText={setPassword}
+                    placeholder="Enter your password"
+                    placeholderTextColor="#999"
+                    secureTextEntry={!showPassword}
+                    autoCapitalize="none"
+                    editable={!isLoading}
+                  />
+                  <TouchableOpacity
+                    style={styles.eyeButton}
+                    onPress={() => setShowPassword(!showPassword)}
+                    disabled={isLoading}
+                  >
+                    <Text style={styles.eyeIcon}>
+                      {showPassword ? "👁️" : "👁️‍🗨️"}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              <TouchableOpacity
+                style={[
+                  styles.loginButton,
+                  isLoading && styles.loginButtonDisabled,
+                ]}
+                onPress={handleLogin}
+                disabled={isLoading}
+              >
+                <Text style={styles.loginButtonText}>Login</Text>
+              </TouchableOpacity>
+
+              <Text style={styles.infoText}>
+                Enter any valid email and password to continue
+              </Text>
             </View>
 
-            {/* Login Button */}
-            <TouchableOpacity
-              style={[
-                styles.loginButton,
-                isLoading && styles.loginButtonDisabled,
-              ]}
-              onPress={handleLogin}
-              disabled={isLoading}
-            >
-              {isLoading ? (
-                <ActivityIndicator color={AppConstants.colors.white} />
-              ) : (
-                <Text style={styles.loginButtonText}>Login</Text>
-              )}
-            </TouchableOpacity>
-
-            {/* Info Text */}
-            <Text style={styles.infoText}>
-              Enter any valid email and password to continue
-            </Text>
+            <View style={styles.footer}>
+              <Text style={styles.footerText}>
+                {AppConstants.copyright.text.replace(
+                  "{year}",
+                  new Date().getFullYear().toString()
+                )}
+              </Text>
+            </View>
           </View>
-
-          {/* Footer */}
-          <View style={styles.footer}>
-            <Text style={styles.footerText}>
-              {AppConstants.copyright.text.replace(
-                "{year}",
-                new Date().getFullYear().toString()
-              )}
-            </Text>
-          </View>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </>
   );
 };
 
