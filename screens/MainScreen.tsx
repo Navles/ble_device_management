@@ -1,3 +1,4 @@
+// screens/MainScreen.tsx (IMPROVED VERSION)
 import AppConstants from "@/app/utlis/AppConstants";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import * as Crypto from "expo-crypto";
@@ -31,11 +32,9 @@ const MainScreen: React.FC = () => {
 
   const initializeApp = async (): Promise<void> => {
     try {
-      // Initialize app data
       await dispatch.LoginModel.handleEmptyUserDetails();
       await requestLocationPermission();
       await loginUser();
-      
       setIsLoading(false);
     } catch (error) {
       console.error("Initialization error:", error);
@@ -97,9 +96,6 @@ const MainScreen: React.FC = () => {
   const handleNavigateToBleScan = (): void => {
     router.push("./BleScan");
   };
-  const handleNavigateToConfigur = (): void => {
-    router.push("./DeviceConfig");
-  };
 
   if (isLoading) {
     return (
@@ -133,9 +129,9 @@ const MainScreen: React.FC = () => {
           <View style={styles.logoCircle}>
             <Image source={logo} style={styles.logo} resizeMode="contain" />
           </View>
-          <Text style={styles.welcomeText}>Welcome to Device Manager</Text>
+          <Text style={styles.welcomeText}>Device Manager</Text>
           <Text style={styles.subtitleText}>
-            Monitor and manage your IoT devices
+            Monitor, configure, and manage your IoT devices
           </Text>
         </View>
       </View>
@@ -144,6 +140,7 @@ const MainScreen: React.FC = () => {
       <View style={styles.content}>
         {/* Feature Cards */}
         <View style={styles.cardsContainer}>
+          {/* Device Records/Database */}
           <TouchableOpacity
             style={styles.card}
             onPress={handleNavigateToRecords}
@@ -151,16 +148,24 @@ const MainScreen: React.FC = () => {
           >
             <View style={[styles.iconCircle, { backgroundColor: "#3b82f620" }]}>
               <MaterialIcons
-                name="assessment"
+                name="inventory"
                 color="#3b82f6"
                 size={32}
               />
             </View>
             <View style={styles.cardContent}>
-              <Text style={styles.cardTitle}>Device Records</Text>
+              <Text style={styles.cardTitle}>Device Database</Text>
               <Text style={styles.cardDescription}>
-                View history and analytics
+                View and manage registered devices
               </Text>
+              <View style={styles.featureTags}>
+                <View style={[styles.featureTag, { backgroundColor: "#dbeafe" }]}>
+                  <Text style={[styles.featureTagText, { color: "#2563eb" }]}>View</Text>
+                </View>
+                <View style={[styles.featureTag, { backgroundColor: "#dbeafe" }]}>
+                  <Text style={[styles.featureTagText, { color: "#2563eb" }]}>Edit</Text>
+                </View>
+              </View>
             </View>
             <MaterialIcons
               name="chevron-right"
@@ -169,6 +174,7 @@ const MainScreen: React.FC = () => {
             />
           </TouchableOpacity>
 
+          {/* Scan & Connect - All BLE Operations */}
           <TouchableOpacity
             style={styles.card}
             onPress={handleNavigateToBleScan}
@@ -182,10 +188,21 @@ const MainScreen: React.FC = () => {
               />
             </View>
             <View style={styles.cardContent}>
-              <Text style={styles.cardTitle}>Add New Device</Text>
+              <Text style={styles.cardTitle}>Scan & Connect</Text>
               <Text style={styles.cardDescription}>
-                Scan and monitor the live data
+                Find nearby devices to interact with
               </Text>
+              <View style={styles.featureTags}>
+                <View style={[styles.featureTag, { backgroundColor: "#d1fae5" }]}>
+                  <Text style={[styles.featureTagText, { color: "#059669" }]}>Monitor</Text>
+                </View>
+                <View style={[styles.featureTag, { backgroundColor: "#d1fae5" }]}>
+                  <Text style={[styles.featureTagText, { color: "#059669" }]}>Configure</Text>
+                </View>
+                <View style={[styles.featureTag, { backgroundColor: "#d1fae5" }]}>
+                  <Text style={[styles.featureTagText, { color: "#059669" }]}>Register</Text>
+                </View>
+              </View>
             </View>
             <MaterialIcons
               name="chevron-right"
@@ -193,30 +210,38 @@ const MainScreen: React.FC = () => {
               size={24}
             />
           </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.card}
-            onPress={handleNavigateToConfigur}
-            activeOpacity={0.8}
-          >
-            <View style={[styles.iconCircle, { backgroundColor: "#b9105120" }]}>
-              <MaterialIcons
-                name="settings"
-                color="red"
-                size={32}
-              />
+        </View>
+
+        {/* Info Section - Clarifies the workflow */}
+        <View style={styles.infoSection}>
+          <View style={styles.infoHeader}>
+            <MaterialIcons name="lightbulb-outline" color="#f59e0b" size={20} />
+            <Text style={styles.infoHeaderText}>Quick Guide</Text>
+          </View>
+          
+          <View style={styles.infoItem}>
+            <View style={styles.infoIconCircle}>
+              <Text style={styles.infoNumber}>1</Text>
             </View>
-            <View style={styles.cardContent}>
-              <Text style={styles.cardTitle}>Device Configure</Text>
-              <Text style={styles.cardDescription}>
-                Scan and configure
+            <View style={styles.infoContent}>
+              <Text style={styles.infoTitle}>Database Management</Text>
+              <Text style={styles.infoText}>
+                View all registered devices, edit their details, or check their history
               </Text>
             </View>
-            <MaterialIcons
-              name="chevron-right"
-              color={AppConstants.colors.textSecondary}
-              size={24}
-            />
-          </TouchableOpacity>
+          </View>
+
+          <View style={styles.infoItem}>
+            <View style={styles.infoIconCircle}>
+              <Text style={styles.infoNumber}>2</Text>
+            </View>
+            <View style={styles.infoContent}>
+              <Text style={styles.infoTitle}>Connect to Devices</Text>
+              <Text style={styles.infoText}>
+                Scan for nearby devices, then choose to monitor live data, configure settings, or register new devices
+              </Text>
+            </View>
+          </View>
         </View>
 
         {/* Status Indicators */}
@@ -274,7 +299,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   header: {
-    height: height * 0.35,
+    height: height * 0.3,
     backgroundColor: AppConstants.colors.primary,
     borderBottomLeftRadius: 30,
     borderBottomRightRadius: 30,
@@ -297,13 +322,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   logoCircle: {
-    width: width * 0.35,
-    height: width * 0.35,
-    borderRadius: (width * 0.35) / 2,
+    width: width * 0.28,
+    height: width * 0.28,
+    borderRadius: (width * 0.28) / 2,
     backgroundColor: "#ffffff",
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 20,
+    marginBottom: 16,
     elevation: 8,
     shadowColor: "#000",
     shadowOpacity: 0.15,
@@ -311,18 +336,18 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
   },
   logo: {
-    width: width * 0.25,
-    height: width * 0.25,
+    width: width * 0.2,
+    height: width * 0.2,
   },
   welcomeText: {
     fontSize: 24,
     fontWeight: "bold",
     color: "#ffffff",
-    marginBottom: 8,
+    marginBottom: 6,
     textAlign: "center",
   },
   subtitleText: {
-    fontSize: 14,
+    fontSize: 13,
     color: "#ffffff",
     opacity: 0.9,
     textAlign: "center",
@@ -330,17 +355,18 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     paddingHorizontal: 20,
-    paddingTop: 30,
+    paddingTop: 24,
   },
   cardsContainer: {
     gap: 16,
+    marginBottom: 20,
   },
   card: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#ffffff",
     borderRadius: 16,
-    padding: 20,
+    padding: 18,
     elevation: 3,
     shadowColor: "#000",
     shadowOpacity: 0.08,
@@ -355,13 +381,13 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 16,
+    marginRight: 14,
   },
   cardContent: {
     flex: 1,
   },
   cardTitle: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: "700",
     color: AppConstants.colors.textPrimary,
     marginBottom: 4,
@@ -369,21 +395,87 @@ const styles = StyleSheet.create({
   cardDescription: {
     fontSize: 13,
     color: AppConstants.colors.textSecondary,
+    marginBottom: 8,
+  },
+  featureTags: {
+    flexDirection: "row",
+    gap: 6,
+    flexWrap: "wrap",
+  },
+  featureTag: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+  },
+  featureTagText: {
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  infoSection: {
+    backgroundColor: "#fffbeb",
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: "#fef3c7",
+  },
+  infoHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 16,
+  },
+  infoHeaderText: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#92400e",
+  },
+  infoItem: {
+    flexDirection: "row",
+    marginBottom: 12,
+    gap: 12,
+  },
+  infoIconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#fbbf24",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  infoNumber: {
+    fontSize: 14,
+    fontWeight: "bold",
+    color: "#ffffff",
+  },
+  infoContent: {
+    flex: 1,
+  },
+  infoTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#78350f",
+    marginBottom: 2,
+  },
+  infoText: {
+    fontSize: 12,
+    color: "#92400e",
+    lineHeight: 18,
   },
   statusContainer: {
     flexDirection: "row",
     justifyContent: "center",
-    gap: 24,
-    marginTop: 30,
-    paddingHorizontal: 20,
+    gap: 20,
+    marginTop: "auto",
+    marginBottom: 10,
   },
   statusItem: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
     backgroundColor: "#ffffff",
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     borderRadius: 20,
     elevation: 2,
     shadowColor: "#000",
@@ -397,7 +489,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   footer: {
-    paddingVertical: 20,
+    paddingVertical: 16,
     alignItems: "center",
     borderTopWidth: 1,
     borderTopColor: "#e2e8f0",
