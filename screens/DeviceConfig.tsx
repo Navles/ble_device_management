@@ -5,6 +5,8 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
   Alert,
+  KeyboardAvoidingView,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -23,18 +25,18 @@ import { useLoading } from "../hooks/useLoading";
 const SERVICE_UUID = "4fafc201-1fb5-459e-8fcc-c5c9c331914b";
 
 const CHARACTERISTICS = {
-  UNKNOWN: "beb5483e-36e1-4688-b7f5-ea07361b26a8",        // Not sure what this is
-  APN: "beb5483e-36e1-4688-b7f5-ea07361b26a9",            // APN setting
-  NUMBER: "beb5483e-36e1-4688-b7f5-ea07361b26aa",         // Phone number
-  API_IMAGE: "beb5483e-36e1-4688-b7f5-ea07361b26ab",      // Image upload API
-  API_KEEPALIVE: "beb5483e-36e1-4688-b7f5-ea07361b26ac",  // Keepalive API
-  LOG: "beb5483e-36e1-4688-b7f5-ea07361b26ad",            // Logs (NOTIFY only)
+  UNKNOWN: "beb5483e-36e1-4688-b7f5-ea07361b26a8", // Not sure what this is
+  APN: "beb5483e-36e1-4688-b7f5-ea07361b26a9", // APN setting
+  NUMBER: "beb5483e-36e1-4688-b7f5-ea07361b26aa", // Phone number
+  API_IMAGE: "beb5483e-36e1-4688-b7f5-ea07361b26ab", // Image upload API
+  API_KEEPALIVE: "beb5483e-36e1-4688-b7f5-ea07361b26ac", // Keepalive API
+  LOG: "beb5483e-36e1-4688-b7f5-ea07361b26ad", // Logs (NOTIFY only)
 };
 
 // ==================== Configuration State ====================
 interface DeviceConfig {
   apn: string;
-  phoneNumber: string;
+  // phoneNumber: string;
   imageApiUrl: string;
   keepaliveApiUrl: string;
   unknownValue: string;
@@ -42,11 +44,43 @@ interface DeviceConfig {
 
 const DEFAULT_CONFIG: DeviceConfig = {
   apn: "internet",
-  phoneNumber: "",
+  // phoneNumber: "",
   imageApiUrl: "https://ctm.sensz.ai/bo/upload",
   keepaliveApiUrl: "https://ctm.sensz.ai/bo/keepalive",
   unknownValue: "",
 };
+
+const ConfigSection = ({ title, children }: any) => (
+  <View style={styles.section}>
+    <Text style={styles.sectionTitle}>{title}</Text>
+    {children}
+  </View>
+);
+
+const ConfigField = ({
+  label,
+  value,
+  onChangeText,
+  placeholder,
+  multiline = false,
+  editable,
+}: any) => (
+  <View style={styles.configField}>
+    <Text style={styles.fieldLabel}>{label}</Text>
+    <TextInput
+      style={[styles.input, multiline && styles.inputMultiline]}
+      value={value}
+      onChangeText={onChangeText}
+      placeholder={placeholder}
+      placeholderTextColor="#9ca3af"
+      editable={editable}
+      multiline={multiline}
+      numberOfLines={multiline ? 3 : 1}
+      autoCapitalize="none"
+      blurOnSubmit={false}
+    />
+  </View>
+);
 
 const DeviceConfig: React.FC = () => {
   const router = useRouter();
@@ -61,7 +95,8 @@ const DeviceConfig: React.FC = () => {
   const [isConnected, setIsConnected] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [config, setConfig] = useState<DeviceConfig>(DEFAULT_CONFIG);
-  const [originalConfig, setOriginalConfig] = useState<DeviceConfig>(DEFAULT_CONFIG);
+  const [originalConfig, setOriginalConfig] =
+    useState<DeviceConfig>(DEFAULT_CONFIG);
 
   useEffect(() => {
     connectAndReadConfig();
@@ -111,18 +146,18 @@ const DeviceConfig: React.FC = () => {
     try {
       console.log(`✍️ Writing ${label}: "${value}"`);
       const base64Data = Buffer.from(value, "utf-8").toString("base64");
-      
+
       await device.writeCharacteristicWithResponseForService(
         SERVICE_UUID,
         charUuid,
         base64Data
       );
-      
+
       console.log(`✅ ${label} written successfully`);
       return true;
     } catch (error: any) {
       console.error(`❌ Write ${label} failed:`, error.message);
-      
+
       // Try without response as fallback
       try {
         console.log(`🔄 Retrying ${label} without response...`);
@@ -151,13 +186,13 @@ const DeviceConfig: React.FC = () => {
     await withLoader(async () => {
       try {
         console.log("🔵 Connecting to device:", params.deviceId);
-        
+
         // Connect
         const connectedDevice = await manager.connectToDevice(
           params.deviceId!,
           { timeout: 15000 }
         );
-        
+
         console.log("✅ Device connected");
         setDevice(connectedDevice);
         setIsConnected(true);
@@ -174,11 +209,11 @@ const DeviceConfig: React.FC = () => {
             CHARACTERISTICS.APN,
             "APN"
           ),
-          phoneNumber: await readCharacteristic(
-            connectedDevice,
-            CHARACTERISTICS.NUMBER,
-            "Phone Number"
-          ),
+          // phoneNumber: await readCharacteristic(
+          //   connectedDevice,
+          //   CHARACTERISTICS.NUMBER,
+          //   "Phone Number"
+          // ),
           imageApiUrl: await readCharacteristic(
             connectedDevice,
             CHARACTERISTICS.API_IMAGE,
@@ -199,9 +234,10 @@ const DeviceConfig: React.FC = () => {
         // Use defaults if empty
         const finalConfig = {
           apn: newConfig.apn || DEFAULT_CONFIG.apn,
-          phoneNumber: newConfig.phoneNumber || DEFAULT_CONFIG.phoneNumber,
+          // phoneNumber: newConfig.phoneNumber || DEFAULT_CONFIG.phoneNumber,
           imageApiUrl: newConfig.imageApiUrl || DEFAULT_CONFIG.imageApiUrl,
-          keepaliveApiUrl: newConfig.keepaliveApiUrl || DEFAULT_CONFIG.keepaliveApiUrl,
+          keepaliveApiUrl:
+            newConfig.keepaliveApiUrl || DEFAULT_CONFIG.keepaliveApiUrl,
           unknownValue: newConfig.unknownValue || DEFAULT_CONFIG.unknownValue,
         };
 
@@ -214,11 +250,10 @@ const DeviceConfig: React.FC = () => {
           visibilityTime: 2000,
           position: "bottom",
         });
-
       } catch (error: any) {
         console.error("❌ Connection error:", error);
         setIsConnected(false);
-        
+
         Alert.alert(
           "Connection Error",
           error.message?.includes("timeout")
@@ -249,14 +284,14 @@ const DeviceConfig: React.FC = () => {
         );
       }
 
-      if (config.phoneNumber !== originalConfig.phoneNumber) {
-        results.PhoneNumber = await writeCharacteristic(
-          device,
-          CHARACTERISTICS.NUMBER,
-          config.phoneNumber,
-          "Phone Number"
-        );
-      }
+      // if (config.phoneNumber !== originalConfig.phoneNumber) {
+      //   results.PhoneNumber = await writeCharacteristic(
+      //     device,
+      //     CHARACTERISTICS.NUMBER,
+      //     config.phoneNumber,
+      //     "Phone Number"
+      //   );
+      // }
 
       if (config.imageApiUrl !== originalConfig.imageApiUrl) {
         results.ImageAPI = await writeCharacteristic(
@@ -327,14 +362,18 @@ const DeviceConfig: React.FC = () => {
         "Unsaved Changes",
         "You have unsaved changes. Do you want to save before leaving?",
         [
-          { text: "Discard", style: "destructive", onPress: () => router.back() },
+          {
+            text: "Discard",
+            style: "destructive",
+            onPress: () => router.back(),
+          },
           { text: "Cancel", style: "cancel" },
-          { 
-            text: "Save", 
+          {
+            text: "Save",
             onPress: async () => {
               await writeConfiguration();
               router.back();
-            }
+            },
           },
         ]
       );
@@ -344,177 +383,171 @@ const DeviceConfig: React.FC = () => {
   };
 
   // ==================== UI Components ====================
-  const ConfigSection = ({ title, children }: any) => (
-    <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      {children}
-    </View>
-  );
-
-  const ConfigField = ({ 
-    label, 
-    value, 
-    onChangeText, 
-    placeholder, 
-    multiline = false 
-  }: any) => (
-    <View style={styles.configField}>
-      <Text style={styles.fieldLabel}>{label}</Text>
-      <TextInput
-        style={[styles.input, multiline && styles.inputMultiline]}
-        value={value}
-        onChangeText={onChangeText}
-        placeholder={placeholder}
-        placeholderTextColor="#9ca3af"
-        editable={isConnected}
-        multiline={multiline}
-        numberOfLines={multiline ? 3 : 1}
-        autoCapitalize="none"
-      />
-    </View>
-  );
+  // 🔽 Move these ABOVE DeviceConfig component
 
   // ==================== Render ====================
   return (
     <>
-      <GlobalLoader visible={isLoading} message={loadingMessage} />
-      
-      <View style={styles.container}>
-        {/* Status Bar */}
-        <View style={styles.statusBar}>
-          <View style={styles.statusLeft}>
-            <View
-              style={[
-                styles.statusDot,
-                { backgroundColor: isConnected ? "#22c55e" : "#ef4444" },
-              ]}
-            />
-            <Text style={styles.statusText}>
-              {isConnected ? "Connected" : "Disconnected"}
-            </Text>
-          </View>
-          <Text style={styles.deviceName}>
-            {params.deviceName || "Unknown Device"}
-          </Text>
-        </View>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+        <GlobalLoader visible={isLoading} message={loadingMessage} />
 
-        {/* Help Banner */}
-        <View style={styles.helpBanner}>
-          <MaterialIcons name="info-outline" size={20} color="#3b82f6" />
-          <Text style={styles.helpText}>
-            Configure your device's network settings and API endpoints
-          </Text>
-        </View>
-
-        <ScrollView style={styles.scrollView}>
-          {/* Network Settings */}
-          <ConfigSection title="📡 Network Settings">
-            <ConfigField
-              label="APN (Access Point Name)"
-              value={config.apn}
-              onChangeText={(text: string) => updateConfig("apn", text)}
-              placeholder="e.g., internet, airtelgprs.com"
-            />
-            
-            <ConfigField
-              label="Phone Number"
-              value={config.phoneNumber}
-              onChangeText={(text: string) => updateConfig("phoneNumber", text)}
-              placeholder="e.g., +1234567890"
-            />
-          </ConfigSection>
-
-          {/* API Settings */}
-          <ConfigSection title="🌐 API Endpoints">
-            <ConfigField
-              label="Image Upload API"
-              value={config.imageApiUrl}
-              onChangeText={(text: string) => updateConfig("imageApiUrl", text)}
-              placeholder="https://your-server.com/upload"
-              multiline
-            />
-            
-            <ConfigField
-              label="Keepalive API"
-              value={config.keepaliveApiUrl}
-              onChangeText={(text: string) => updateConfig("keepaliveApiUrl", text)}
-              placeholder="https://your-server.com/keepalive"
-              multiline
-            />
-          </ConfigSection>
-
-          {/* Advanced (Unknown characteristic) */}
-          <ConfigSection title="⚙️ Advanced">
-            <ConfigField
-              label="Device Parameter"
-              value={config.unknownValue}
-              onChangeText={(text: string) => updateConfig("unknownValue", text)}
-              placeholder="Leave empty if unsure"
-            />
-            <Text style={styles.helperText}>
-              This parameter's function is not documented. Modify only if instructed.
-            </Text>
-          </ConfigSection>
-
-          {/* Info Section */}
-          <View style={styles.infoSection}>
-            <MaterialIcons name="lightbulb-outline" size={20} color="#f59e0b" />
-            <View style={styles.infoContent}>
-              <Text style={styles.infoTitle}>About Configuration</Text>
-              <Text style={styles.infoText}>
-                • APN: Required for cellular data connection{'\n'}
-                • Phone Number: For SMS functionality (if supported){'\n'}
-                • API URLs: Where device sends images and keepalive pings{'\n'}
-                • Changes take effect after saving
+        <View style={styles.container}>
+          {/* Status Bar */}
+          <View style={styles.statusBar}>
+            <View style={styles.statusLeft}>
+              <View
+                style={[
+                  styles.statusDot,
+                  { backgroundColor: isConnected ? "#22c55e" : "#ef4444" },
+                ]}
+              />
+              <Text style={styles.statusText}>
+                {isConnected ? "Connected" : "Disconnected"}
               </Text>
             </View>
+            <Text style={styles.deviceName}>
+              {params.deviceName || "Unknown Device"}
+            </Text>
           </View>
 
-          <View style={{ height: 120 }} />
-        </ScrollView>
-
-        {/* Action Buttons */}
-        <View style={styles.actionBar}>
-          <TouchableOpacity
-            style={[styles.button, styles.resetButton]}
-            onPress={() => {
-              Alert.alert(
-                "Reset Configuration",
-                "Re-read configuration from device?",
-                [
-                  { text: "Cancel", style: "cancel" },
-                  {
-                    text: "Reset",
-                    style: "destructive",
-                    onPress: connectAndReadConfig,
-                  },
-                ]
-              );
-            }}
-            disabled={!isConnected}
-          >
-            <MaterialIcons name="refresh" size={20} color="#ef4444" />
-            <Text style={[styles.buttonText, { color: "#ef4444" }]}>
-              Reload
+          {/* Help Banner */}
+          <View style={styles.helpBanner}>
+            <MaterialIcons name="info-outline" size={20} color="#3b82f6" />
+            <Text style={styles.helpText}>
+              Configure your device's network settings and API endpoints
             </Text>
-          </TouchableOpacity>
+          </View>
 
-          <TouchableOpacity
-            style={[
-              styles.button,
-              styles.saveButton,
-              (!hasUnsavedChanges || !isConnected) && styles.saveButtonDisabled,
-            ]}
-            onPress={writeConfiguration}
-            disabled={!hasUnsavedChanges || !isConnected}
+          <ScrollView
+            style={styles.scrollView}
+            keyboardShouldPersistTaps="handled"
           >
-            <MaterialIcons name="save" size={20} color="#ffffff" />
-            <Text style={styles.buttonText}>
-              {hasUnsavedChanges ? "Save to Device" : "No Changes"}
-            </Text>
-          </TouchableOpacity>
+            {/* Network Settings */}
+            <ConfigSection title="📡 Network Settings">
+              <ConfigField
+                label="APN (Access Point Name)"
+                value={config.apn}
+                onChangeText={(text: string) => updateConfig("apn", text)}
+                placeholder="e.g., internet, airtelgprs.com"
+              />
+
+              {/* <ConfigField
+                label="Phone Number"
+                value={config.phoneNumber}
+                onChangeText={(text: string) =>
+                  updateConfig("phoneNumber", text)
+                }
+                placeholder="e.g., +1234567890"
+              /> */}
+            </ConfigSection>
+
+            {/* API Settings */}
+            <ConfigSection title="🌐 API Endpoints">
+              <ConfigField
+                label="Image Upload API"
+                value={config.imageApiUrl}
+                onChangeText={(text: string) =>
+                  updateConfig("imageApiUrl", text)
+                }
+                placeholder="https://your-server.com/upload"
+                multiline
+              />
+
+              <ConfigField
+                label="Keepalive API"
+                value={config.keepaliveApiUrl}
+                onChangeText={(text: string) =>
+                  updateConfig("keepaliveApiUrl", text)
+                }
+                placeholder="https://your-server.com/keepalive"
+                multiline
+              />
+            </ConfigSection>
+
+            {/* Advanced (Unknown characteristic) */}
+            <ConfigSection title="⚙️ Advanced">
+              <ConfigField
+                label="Device Parameter"
+                value={config.unknownValue}
+                onChangeText={(text: string) =>
+                  updateConfig("unknownValue", text)
+                }
+                placeholder="Leave empty if unsure"
+              />
+              <Text style={styles.helperText}>
+                This parameter's function is not documented. Modify only if
+                instructed.
+              </Text>
+            </ConfigSection>
+
+            {/* Info Section */}
+            <View style={styles.infoSection}>
+              <MaterialIcons
+                name="lightbulb-outline"
+                size={20}
+                color="#f59e0b"
+              />
+              <View style={styles.infoContent}>
+                <Text style={styles.infoTitle}>About Configuration</Text>
+                <Text style={styles.infoText}>
+                  • APN: Required for cellular data connection{"\n"}• Phone
+                  Number: For SMS functionality (if supported){"\n"}• API URLs:
+                  Where device sends images and keepalive pings{"\n"}• Changes
+                  take effect after saving
+                </Text>
+              </View>
+            </View>
+
+            <View style={{ height: 120 }} />
+          </ScrollView>
+
+          {/* Action Buttons */}
+          <View style={styles.actionBar}>
+            <TouchableOpacity
+              style={[styles.button, styles.resetButton]}
+              onPress={() => {
+                Alert.alert(
+                  "Reset Configuration",
+                  "Re-read configuration from device?",
+                  [
+                    { text: "Cancel", style: "cancel" },
+                    {
+                      text: "Reset",
+                      style: "destructive",
+                      onPress: connectAndReadConfig,
+                    },
+                  ]
+                );
+              }}
+              disabled={!isConnected}
+            >
+              <MaterialIcons name="refresh" size={20} color="#ef4444" />
+              <Text style={[styles.buttonText, { color: "#ef4444" }]}>
+                Reload
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.button,
+                styles.saveButton,
+                (!hasUnsavedChanges || !isConnected) &&
+                  styles.saveButtonDisabled,
+              ]}
+              onPress={writeConfiguration}
+              disabled={!hasUnsavedChanges || !isConnected}
+            >
+              <MaterialIcons name="save" size={20} color="#ffffff" />
+              <Text style={styles.buttonText}>
+                {hasUnsavedChanges ? "Save to Device" : "No Changes"}
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </>
   );
 };
