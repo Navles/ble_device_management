@@ -24,13 +24,11 @@ import { ConfigItem, Device } from "../types/types";
 
 const { width, height } = Dimensions.get("window");
 
-// Utility: extract config value by ID
 const getConfigValue = (config: ConfigItem[], id: string): any => {
   const item = config.find((c) => c.id === id);
   return item ? item.value : undefined;
 };
 
-// Utility: derive image URL (adjust URL pattern as needed)
 const getImageUrl = (item: Device): string | null => {
   const hasImage = getConfigValue(item.config, "IMG") === 1;
   if (!hasImage) return null;
@@ -41,7 +39,6 @@ const DeviceRecords: React.FC = () => {
   const { token } = useSelector((state: RootState) => state.LoginModel);
   const dispatch = useDispatch<any>();
   const { isLoading, loadingMessage, withLoader } = useLoading();
-
   const [items, setItems] = useState<Device[]>([]);
   const [page, setPage] = useState<number>(0);
   const [totalPages, setTotalPages] = useState<number>(0);
@@ -225,10 +222,10 @@ const DeviceRecords: React.FC = () => {
     return (
       <TouchableOpacity
         style={styles.card}
-         onPress={() => {
-              setSelectedDevice(item);
-              setDetailsVisible(true);
-            }}
+        onPress={() => {
+          setSelectedDevice(item);
+          setDetailsVisible(true);
+        }}
         // onPress={() => handleCardPress(item)}
         activeOpacity={0.8}
       >
@@ -323,10 +320,7 @@ const DeviceRecords: React.FC = () => {
           </View>
 
           {/* Action Button */}
-          <View
-            style={styles.viewDetailsButton}
-           
-          >
+          <View style={styles.viewDetailsButton}>
             <Text style={styles.viewDetailsText}>View Full Details</Text>
             <MaterialIcons name="arrow-forward" size={16} color="#3b82f6" />
           </View>
@@ -335,10 +329,10 @@ const DeviceRecords: React.FC = () => {
     );
   };
 
-  const onRefresh = useCallback(async() => {
+  const onRefresh = useCallback(async () => {
     try {
       setIsRefreshing(true);
-      await  fetchDevices(0, false);
+      await fetchDevices(0, false);
     } finally {
       setIsRefreshing(false);
     }

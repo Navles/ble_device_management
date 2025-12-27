@@ -1,5 +1,4 @@
 // screens/DeviceDetails.tsx (Updated)
-import * as Location from 'expo-location';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
@@ -95,38 +94,38 @@ const DeviceDetails: React.FC = () => {
     }
   }, [isEdit]);
 
-  useEffect(() => {
-    requestLocationPermission();
-  }, []);
+  // useEffect(() => {
+  //   requestLocationPermission();
+  // }, []);
 
-  const requestLocationPermission = async (): Promise<void> => {
-    await withLoader(async () => {
-      try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status === 'granted') {
-          await getUserCurrentLocation();
-        } else {
-          setError(AppConstants.messages.error.locationPermissionDenied);
-        }
-      } catch (error) {
-        console.error('Permission request error:', error);
-        setError(AppConstants.messages.error.fetchError);
-      }
-    }, 'Getting location...');
-  };
+  // const requestLocationPermission = async (): Promise<void> => {
+  //   await withLoader(async () => {
+  //     try {
+  //       const { status } = await Location.requestForegroundPermissionsAsync();
+  //       if (status === 'granted') {
+  //         await getUserCurrentLocation();
+  //       } else {
+  //         setError(AppConstants.messages.error.locationPermissionDenied);
+  //       }
+  //     } catch (error) {
+  //       console.error('Permission request error:', error);
+  //       setError(AppConstants.messages.error.fetchError);
+  //     }
+  //   }, 'Getting location...');
+  // };
 
-  const getUserCurrentLocation = async (): Promise<void> => {
-    try {
-      const location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.High,
-      });
-      setLatitude(location.coords.latitude.toString());
-      setLongitude(location.coords.longitude.toString());
-    } catch (error) {
-      console.error('Error fetching location:', error);
-      setError(AppConstants.messages.error.fetchError);
-    }
-  };
+  // const getUserCurrentLocation = async (): Promise<void> => {
+  //   try {
+  //     const location = await Location.getCurrentPositionAsync({
+  //       accuracy: Location.Accuracy.High,
+  //     });
+  //     setLatitude(location.coords.latitude.toString());
+  //     setLongitude(location.coords.longitude.toString());
+  //   } catch (error) {
+  //     console.error('Error fetching location:', error);
+  //     setError(AppConstants.messages.error.fetchError);
+  //   }
+  // };
 
   const handleSubmit = async (): Promise<void> => {
     if (!depth) {
@@ -187,6 +186,7 @@ const DeviceDetails: React.FC = () => {
         type,
         bin,
         path: '',
+        
       };
 
       const datavalues = {
@@ -222,7 +222,7 @@ const DeviceDetails: React.FC = () => {
           <TextInput
             style={styles.input}
             value={deviceName}
-            editable={false}
+            editable={true}
             placeholder="Device Name"
             placeholderTextColor="#999"
           />
@@ -236,7 +236,7 @@ const DeviceDetails: React.FC = () => {
             placeholderTextColor="#999"
           />
 
-          <Text style={styles.label}>Latitude</Text>
+          {/* <Text style={styles.label}>Latitude</Text>
           <TextInput
             style={styles.input}
             value={latitude}
@@ -252,9 +252,9 @@ const DeviceDetails: React.FC = () => {
             editable={false}
             placeholder="Longitude"
             placeholderTextColor="#999"
-          />
+          /> */}
 
-          <Text style={styles.label}>DIC height (cm)</Text>
+          {/* <Text style={styles.label}>DIC height (cm)</Text>
           <TextInput
             style={styles.input}
             value={depth}
@@ -271,7 +271,7 @@ const DeviceDetails: React.FC = () => {
             onChangeText={setSector}
             placeholder="Sector"
             placeholderTextColor="#999"
-          />
+          /> */}
 
           <Text style={styles.label}>Team</Text>
           <DropDownPicker

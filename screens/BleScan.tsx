@@ -1,4 +1,4 @@
-// screens/BleScan.tsx - Updated with navigation modes
+// screens/BleScan.tsx - Updated with proper permission status handling
 import { MaterialIcons } from "@expo/vector-icons";
 import * as Location from "expo-location";
 import { router, useLocalSearchParams } from "expo-router";
@@ -153,7 +153,11 @@ const BleScan: React.FC = () => {
     hasNavigated.current = false;
 
     const permissionsGranted = await requestPermissions();
-    setPermissionsGranted(permissionsGranted);
+    const btEnabled = await manager.state() === "PoweredOn";
+    
+    // Only set permissions as granted if both permissions AND Bluetooth are ready
+    setPermissionsGranted(permissionsGranted && btEnabled);
+    setBluetoothEnabled(btEnabled);
 
     if (!permissionsGranted) {
       Alert.alert(
@@ -164,8 +168,11 @@ const BleScan: React.FC = () => {
       return;
     }
 
-    const btEnabled = await ensureBluetoothEnabled();
-    setBluetoothEnabled(btEnabled);
+    if (!btEnabled) {
+      const enabled = await ensureBluetoothEnabled();
+      setBluetoothEnabled(enabled);
+      setPermissionsGranted(permissionsGranted && enabled);
+    }
 
     if (Platform.OS === "android" && btEnabled) {
       await checkLocationServices();
@@ -180,6 +187,17 @@ const BleScan: React.FC = () => {
     const subscription = manager.onStateChange((state) => {
       const isBtOn = state === "PoweredOn";
       setBluetoothEnabled(isBtOn);
+      
+      // Update permissions status based on Bluetooth state
+      // Permissions are only truly "granted" when Bluetooth is also enabled
+      if (!isBtOn) {
+        setPermissionsGranted(false);
+      } else {
+        // Re-check permissions when Bluetooth is turned back on
+        requestPermissions().then(granted => {
+          setPermissionsGranted(granted && isBtOn);
+        });
+      }
 
       if (!isBtOn && !isInitializing) {
         Alert.alert(
@@ -490,13 +508,6 @@ const BleScan: React.FC = () => {
     inputRange: [0, 1],
     outputRange: [0, 1],
   });
-
-  // Get title based on mode
-  const getScreenTitle = () => {
-    if (navigationMode === "add") return "Scan to Add Device";
-    if (navigationMode === "monitor") return "Scan to Monitor";
-    return "BLE Scanner";
-  };
 
   return (
     <>
