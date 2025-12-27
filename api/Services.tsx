@@ -8,6 +8,7 @@ const newUrl = 'https://ctm.sensz.ai/bo';
 interface RequestData {
   row?: string;
   deviceType?: string;
+  page?: string;
   [key: string]: any;
 }
 
@@ -144,22 +145,36 @@ const getDicDevice = async (
   data: RequestData,
   token: string
 ): Promise<ApiResponse<DeviceApiResponse>> => {
-  console.log('apientering');
+  console.log('API Request - getDicDevice:', data);
+  
+  // Use page from data if provided, otherwise default to 0
+  const pageNo = data.page || '0';
+  const pageSize = data.row || '10';
+  
+  const url = `${newUrl}/device/dic?pageNo=${pageNo}&pageSize=${pageSize}`;
+  console.log('Fetching from URL:', url);
+  
   try {
-    const getDeviceInfo = await fetch(
-      `${newUrl}/device/dic?&pageNo=0&pageSize=${data.row}`,
-      {
-        method: 'GET',
-        headers: {
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-      }
-    );
-    return await responseBuilder<ApiResponse<DeviceApiResponse>>(getDeviceInfo);
+    const getDeviceInfo = await fetch(url, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    
+    const response = await responseBuilder<ApiResponse<DeviceApiResponse>>(getDeviceInfo);
+    console.log(`API Response - Page ${pageNo}:`, {
+      totalElements: response.response.body.totalElements,
+      totalPages: response.response.body.totalPages,
+      currentPage: response.response.body.number,
+      itemsInPage: response.response.body.content?.length,
+    });
+    
+    return response;
   } catch (error) {
-    console.error(error);
+    console.error('getDicDevice error:', error);
     throw error;
   }
 };

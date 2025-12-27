@@ -1,7 +1,7 @@
-// screens/BleScan.tsx (FINAL VERSION - Beautiful Modal)
+// screens/BleScan.tsx - Updated with navigation modes
 import { MaterialIcons } from "@expo/vector-icons";
 import * as Location from "expo-location";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -37,6 +37,10 @@ interface DeviceOption {
 }
 
 const BleScan: React.FC = () => {
+  const params = useLocalSearchParams<{
+    mode?: string;
+  }>();
+  
   const [devices, setDevices] = useState<BLEDevice[]>([]);
   const [isScanning, setIsScanning] = useState(false);
   const [clickEnabled, setClickEnabled] = useState(true);
@@ -58,6 +62,9 @@ const BleScan: React.FC = () => {
   const scanTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined
   );
+  
+  // Get navigation mode from params - "add", "monitor", or undefined for full options
+  const navigationMode = params.mode;
 
   /* -------------------- Permissions & Bluetooth Flow -------------------- */
   const requestPermissions = async () => {
@@ -288,7 +295,7 @@ const BleScan: React.FC = () => {
     });
   };
 
-  /* -------------------- Device Click Handler -------------------- */
+  /* -------------------- Device Click Handler with Mode Support -------------------- */
   const handleDeviceClick = async (device: BLEDevice) => {
     if (!clickEnabled || isScanning) return;
 
@@ -317,7 +324,41 @@ const BleScan: React.FC = () => {
 
     setIsRegistered(registered);
 
-    // Build options based on registration status
+    // Handle direct navigation based on mode
+    if (navigationMode === "add") {
+      // Direct navigation to Add Device (DeviceDetails)
+      closeModal();
+      setTimeout(() => {
+        router.push({
+          pathname: "/DeviceDetails",
+          params: {
+            deviceName: device.name || "Unnamed Device",
+            deviceId: device.id,
+            deviceCode: device.id,
+            latitude: AppConstants.messages.info.fetchingLocation,
+            longitude: AppConstants.messages.info.fetchingLocation,
+          },
+        });
+      }, 300);
+      return;
+    }
+
+    if (navigationMode === "monitor") {
+      // Direct navigation to Monitor
+      closeModal();
+      setTimeout(() => {
+        router.push({
+          pathname: "/DeviceMonitor",
+          params: {
+            deviceId: device.id,
+            deviceName: device.name || "Unknown Device",
+          },
+        });
+      }, 300);
+      return;
+    }
+
+    // If no mode specified, show full modal with all options
     const options: DeviceOption[] = [
       {
         icon: "timeline",
@@ -450,10 +491,39 @@ const BleScan: React.FC = () => {
     outputRange: [0, 1],
   });
 
+  // Get title based on mode
+  const getScreenTitle = () => {
+    if (navigationMode === "add") return "Scan to Add Device";
+    if (navigationMode === "monitor") return "Scan to Monitor";
+    return "BLE Scanner";
+  };
+
   return (
     <>
       <GlobalLoader visible={isLoading} message={loadingMessage} />
       <View style={styles.container}>
+        {/* Mode indicator banner */}
+        {navigationMode && (
+          <View style={[
+            styles.modeBanner,
+            { backgroundColor: navigationMode === "add" ? "#10b98115" : "#8b5cf615" }
+          ]}>
+            <MaterialIcons 
+              name={navigationMode === "add" ? "add-circle" : "timeline"} 
+              size={20} 
+              color={navigationMode === "add" ? "#10b981" : "#8b5cf6"}
+            />
+            <Text style={[
+              styles.modeText,
+              { color: navigationMode === "add" ? "#10b981" : "#8b5cf6" }
+            ]}>
+              {navigationMode === "add" 
+                ? "Select a device to register" 
+                : "Select a device to monitor"}
+            </Text>
+          </View>
+        )}
+
         {/* Status Card */}
         <View style={styles.statusCard}>
           <View style={styles.statusRow}>
@@ -517,7 +587,11 @@ const BleScan: React.FC = () => {
               <Text style={styles.stepNumber}>3</Text>
             </View>
             <Text style={styles.instructionText}>
-              Select device to monitor, configure, or register
+              {navigationMode === "add" 
+                ? "Select device to register it" 
+                : navigationMode === "monitor"
+                ? "Select device to monitor it"
+                : "Select device to monitor, configure, or register"}
             </Text>
           </View>
         </View>
@@ -571,112 +645,114 @@ const BleScan: React.FC = () => {
           </View>
         </Modal>
 
-        {/* Beautiful Device Options Modal */}
-        <Modal
-          visible={showDeviceModal}
-          transparent
-          animationType="none"
-          onRequestClose={closeModal}
-        >
-          <TouchableOpacity
-            style={styles.modalBackdrop}
-            activeOpacity={1}
-            onPress={closeModal}
+        {/* Beautiful Device Options Modal (only shown when no mode specified) */}
+        {!navigationMode && (
+          <Modal
+            visible={showDeviceModal}
+            transparent
+            animationType="none"
+            onRequestClose={closeModal}
           >
-            <Animated.View
-              style={[
-                styles.modalContainer,
-                {
-                  opacity: modalOpacity,
-                  transform: [{ scale: modalScale }],
-                },
-              ]}
+            <TouchableOpacity
+              style={styles.modalBackdrop}
+              activeOpacity={1}
+              onPress={closeModal}
             >
-              <TouchableOpacity activeOpacity={1}>
-                {/* Modal Header */}
-                <View style={styles.modalHeader}>
-                  <View style={styles.modalHeaderLeft}>
-                    <View
-                      style={[
-                        styles.modalDeviceIcon,
-                        {
-                          backgroundColor: isRegistered ? "#d1fae5" : "#fef3c7",
-                        },
-                      ]}
-                    >
-                      <MaterialIcons
-                        name="bluetooth-connected"
-                        size={24}
-                        color={isRegistered ? "#10b981" : "#f59e0b"}
-                      />
-                    </View>
-                    <View style={styles.modalDeviceInfo}>
-                      <Text style={styles.modalDeviceStatus}>
-                        {isRegistered ? "✓ Registered Device" : "⚠ New Device"}
-                      </Text>
-                      <Text style={styles.modalDeviceName}>
-                        {selectedDevice?.name || "Unknown Device"}
-                      </Text>
-                      <Text style={styles.modalDeviceId}>
-                        {selectedDevice?.id}
-                      </Text>
-                    </View>
-                  </View>
-                  <TouchableOpacity
-                    style={styles.modalCloseButton}
-                    onPress={closeModal}
-                  >
-                    <MaterialIcons name="close" size={24} color="#6b7280" />
-                  </TouchableOpacity>
-                </View>
-
-                {/* Options */}
-                <View style={styles.modalOptions}>
-                  {deviceOptions.map((option, index) => (
-                    <TouchableOpacity
-                      key={index}
-                      style={styles.optionCard}
-                      onPress={option.onPress}
-                      activeOpacity={0.7}
-                    >
+              <Animated.View
+                style={[
+                  styles.modalContainer,
+                  {
+                    opacity: modalOpacity,
+                    transform: [{ scale: modalScale }],
+                  },
+                ]}
+              >
+                <TouchableOpacity activeOpacity={1}>
+                  {/* Modal Header */}
+                  <View style={styles.modalHeader}>
+                    <View style={styles.modalHeaderLeft}>
                       <View
                         style={[
-                          styles.optionIconContainer,
-                          { backgroundColor: option.bgColor },
+                          styles.modalDeviceIcon,
+                          {
+                            backgroundColor: isRegistered ? "#d1fae5" : "#fef3c7",
+                          },
                         ]}
                       >
                         <MaterialIcons
-                          name={option.icon as any}
+                          name="bluetooth-connected"
                           size={24}
-                          color={option.color}
+                          color={isRegistered ? "#10b981" : "#f59e0b"}
                         />
                       </View>
-                      <View style={styles.optionContent}>
-                        <Text style={styles.optionLabel}>{option.label}</Text>
-                        <Text style={styles.optionDescription}>
-                          {option.description}
+                      <View style={styles.modalDeviceInfo}>
+                        <Text style={styles.modalDeviceStatus}>
+                          {isRegistered ? "✓ Registered Device" : "⚠ New Device"}
+                        </Text>
+                        <Text style={styles.modalDeviceName}>
+                          {selectedDevice?.name || "Unknown Device"}
+                        </Text>
+                        <Text style={styles.modalDeviceId}>
+                          {selectedDevice?.id}
                         </Text>
                       </View>
-                      <MaterialIcons
-                        name="chevron-right"
-                        size={24}
-                        color="#9ca3af"
-                      />
+                    </View>
+                    <TouchableOpacity
+                      style={styles.modalCloseButton}
+                      onPress={closeModal}
+                    >
+                      <MaterialIcons name="close" size={24} color="#6b7280" />
                     </TouchableOpacity>
-                  ))}
-                </View>
+                  </View>
 
-                {/* Cancel Button */}
-                <TouchableOpacity
-                  style={styles.modalCancelButton}
-                  onPress={closeModal}
-                >
-                  <Text style={styles.modalCancelText}>Cancel</Text>
+                  {/* Options */}
+                  <View style={styles.modalOptions}>
+                    {deviceOptions.map((option, index) => (
+                      <TouchableOpacity
+                        key={index}
+                        style={styles.optionCard}
+                        onPress={option.onPress}
+                        activeOpacity={0.7}
+                      >
+                        <View
+                          style={[
+                            styles.optionIconContainer,
+                            { backgroundColor: option.bgColor },
+                          ]}
+                        >
+                          <MaterialIcons
+                            name={option.icon as any}
+                            size={24}
+                            color={option.color}
+                          />
+                        </View>
+                        <View style={styles.optionContent}>
+                          <Text style={styles.optionLabel}>{option.label}</Text>
+                          <Text style={styles.optionDescription}>
+                            {option.description}
+                          </Text>
+                        </View>
+                        <MaterialIcons
+                          name="chevron-right"
+                          size={24}
+                          color="#9ca3af"
+                        />
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+
+                  {/* Cancel Button */}
+                  <TouchableOpacity
+                    style={styles.modalCancelButton}
+                    onPress={closeModal}
+                  >
+                    <Text style={styles.modalCancelText}>Cancel</Text>
+                  </TouchableOpacity>
                 </TouchableOpacity>
-              </TouchableOpacity>
-            </Animated.View>
-          </TouchableOpacity>
-        </Modal>
+              </Animated.View>
+            </TouchableOpacity>
+          </Modal>
+        )}
 
         {/* Devices List */}
         <FlatList
@@ -771,6 +847,17 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#f8fafc",
+  },
+  modeBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 10,
+  },
+  modeText: {
+    fontSize: 14,
+    fontWeight: "600",
   },
   loadingContainer: {
     flex: 1,
@@ -1015,7 +1102,7 @@ const styles = StyleSheet.create({
     color: "#6b7280",
     textAlign: "center",
   },
-  // New Modal Styles
+  // Modal Styles
   modalBackdrop: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.5)",

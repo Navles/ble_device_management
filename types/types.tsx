@@ -34,7 +34,7 @@ export interface Device {
   address: string;
   deviceId: string;
   deviceStatus: string;
-  image: string;
+  image?: string;
   createdDateTime: number;
   modifiedDateTime: number;
   formattedCreatedDateTime: string;
@@ -44,11 +44,18 @@ export interface Device {
   cardNumber?: string;
   deviceCode?: string;
   sector?: string;
+  status?: string;
   team?: string;
   binType?: string;
   type?: string;
   depth?: string;
-  config?: any[];
+   config: ConfigItem[];
+}
+
+export interface ConfigItem {
+  id: string;
+  name: string;
+  value: any;
 }
 
 export interface DropdownItem {
@@ -87,6 +94,31 @@ export interface ApiResponse<T> {
 
 export interface DeviceApiResponse {
   content: Device[];
+  pageable?: {
+    pageNumber: number;
+    pageSize: number;
+    sort: {
+      sorted: boolean;
+      empty: boolean;
+      unsorted: boolean;
+    };
+    offset: number;
+    paged: boolean;
+    unpaged: boolean;
+  };
+  last?: boolean;
+  totalElements?: number;
+  totalPages?: number; // Added missing property
+  first?: boolean;
+  size?: number;
+  number?: number;
+  sort?: {
+    sorted: boolean;
+    empty: boolean;
+    unsorted: boolean;
+  };
+  numberOfElements?: number;
+  empty?: boolean;
 }
 
 export interface BLEDevice {
