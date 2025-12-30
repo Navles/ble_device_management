@@ -4,13 +4,14 @@ import { Buffer } from "buffer";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
+  Animated,
   Dimensions,
   ScrollView,
   StyleSheet,
   Text,
-  TouchableOpacity,
-  View,
+  View
 } from "react-native";
 import { Device as BLEDevice } from "react-native-ble-plx";
 import manager from "../app/ble/bleManager";
@@ -40,15 +41,6 @@ interface LogEntry {
   type?: "info" | "success" | "warning" | "error";
 }
 
-// -------------------- CSQ Helper --------------------
-const getSignalInfo = (csq: number) => {
-  if (csq >= 25) return { label: "Excellent", emoji: "📶", color: "#22c55e" };
-  if (csq >= 20) return { label: "Very Good", emoji: "📶", color: "#4ade80" };
-  if (csq >= 15) return { label: "Good", emoji: "📶", color: "#facc15" };
-  if (csq >= 10) return { label: "Fair", emoji: "📡", color: "#fb923c" };
-  return { label: "Poor", emoji: "📡", color: "#ef4444" };
-};
-
 const DeviceMonitor: React.FC = () => {
   const router = useRouter();
   const params = useLocalSearchParams<{
@@ -61,64 +53,44 @@ const DeviceMonitor: React.FC = () => {
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
 
-  // Steps with icons
+  // Simplified 7 steps
   const [steps, setSteps] = useState<Record<string, StepItem>>({
-    scan: { label: "Scan & Discover", isCompleted: true, icon: "radar" },
-    connect: { label: "Connect Device", isCompleted: false, icon: "link" },
-    services: {
-      label: "Discover Services",
-      isCompleted: false,
-      icon: "cloud-done",
-    },
-    subscribe: {
-      label: "Subscribe Notifications",
-      isCompleted: false,
-      icon: "notifications-active",
-    },
-    tof: {
-      label: "ToF Sensor",
+    depthMeasure: {
+      label: "Depth Measure",
       isCompleted: false,
       value: "",
       icon: "straighten",
     },
-    power: {
-      label: "Power On",
+    modemSim: {
+      label: "Modem & SIM",
       isCompleted: false,
-      icon: "power-settings-new",
-    },
-    modem: { label: "Modem & SIM", isCompleted: false, icon: "sim-card" },
-    network: {
-      label: "Network Registration",
-      isCompleted: false,
-      icon: "signal-cellular-alt",
+      icon: "sim-card",
     },
     internet: {
-      label: "Internet Connection",
+      label: "Connected to Internet",
       isCompleted: false,
       icon: "wifi",
     },
-    iccid: {
-      label: "ICCID",
+    heartbeat: {
+      label: "Heartbeat Sent",
       isCompleted: false,
-      value: "",
-      icon: "credit-card",
+      icon: "favorite",
     },
-    csq: {
-      label: "Signal Quality",
+    imgCapture: {
+      label: "Image Captured",
       isCompleted: false,
-      value: "",
-      color: "#6b7280",
-      icon: "network-check",
+      icon: "camera",
     },
-    dataSent: { label: "Data Sent", isCompleted: false, icon: "send" },
-    imgCapture: { label: "Image Captured", isCompleted: false, icon: "camera" },
-    imgSent: { label: "Image Sent", isCompleted: false, icon: "image" },
-    modemShutdown: {
-      label: "Modem Shutdown",
+    imgSent: {
+      label: "Image Sent",
       isCompleted: false,
-      icon: "power-off",
+      icon: "image",
     },
-    sleep: { label: "Device Sleep", isCompleted: false, icon: "bedtime" },
+    sleep: {
+      label: "Device Sleep",
+      isCompleted: false,
+      icon: "bedtime",
+    },
   });
 
   const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -166,7 +138,6 @@ const DeviceMonitor: React.FC = () => {
     if (!params.deviceId) return;
     try {
       setIsConnecting(true);
-      updateStep("connect", { label: "Connecting..." });
 
       console.log(`🔵 Connecting to: ${params.deviceId}`);
       const connectedDevice = await manager.connectToDevice(params.deviceId, {
@@ -174,16 +145,13 @@ const DeviceMonitor: React.FC = () => {
       });
       setDevice(connectedDevice);
       setIsConnected(true);
-      updateStep("connect", { isCompleted: true, label: "Connect Device" });
       addLog("Device connected successfully", "success");
 
       await connectedDevice.discoverAllServicesAndCharacteristics();
-      updateStep("services", { isCompleted: true });
       addLog("Services discovered", "success");
 
       // Subscribe
       monitorNotifications(connectedDevice);
-      updateStep("subscribe", { isCompleted: true });
       addLog("Subscribed to notifications", "success");
 
       console.log("🟢 BLE Connected & Subscribed!");
@@ -191,7 +159,6 @@ const DeviceMonitor: React.FC = () => {
       console.error("Connection failed:", error);
       Alert.alert("Connection Error", error.message || "Failed to connect");
       setIsConnected(false);
-      updateStep("connect", { label: "Connect Device", isCompleted: false });
       addLog(`Connection failed: ${error.message}`, "error");
     } finally {
       setIsConnecting(false);
@@ -237,46 +204,56 @@ const DeviceMonitor: React.FC = () => {
 
     addLog(clean, logType);
 
-    if (lower.includes("tof_value")) {
-      const match = lower.match(/tof_value\D*(\d+)/);
-      if (match)
-        updateStep("tof", { isCompleted: true, value: `${match[1]} mm` });
-    }
-    if (lower.includes("power on")) updateStep("power", { isCompleted: true });
-    if (lower.includes("modem") && lower.includes("sim ok"))
-      updateStep("modem", { isCompleted: true });
-    if (lower.includes("network reg ok"))
-      updateStep("network", { isCompleted: true });
-    if (lower.includes("connected to internet"))
-      updateStep("internet", { isCompleted: true });
-    if (lower.includes("iccid")) {
-      const match = clean.match(/iccid[:\s]*([0-9A-F]+)/i);
-      updateStep("iccid", {
-        isCompleted: true,
-        value: match ? match[1].substring(0, 12) + "..." : "Received",
-      });
-    }
-    if (lower.includes("+csq")) {
-      const match = clean.match(/\+CSQ:\s*(\d+)/i);
+    // Parse for specific steps
+    if (lower.includes("tof_value") || lower.includes("depth")) {
+      const match = lower.match(/tof_value\D*(\d+)|depth\D*(\d+)/);
       if (match) {
-        const val = parseInt(match[1], 10);
-        const quality = getSignalInfo(val);
-        updateStep("csq", {
+        const value = match[1] || match[2];
+        updateStep("depthMeasure", {
           isCompleted: true,
-          value: `${val} ${quality.emoji}`,
-          color: quality.color,
+          value: `${value} mm`,
         });
       }
     }
-    if (lower.includes("data send successful") || lower.includes("data sent"))
-      updateStep("dataSent", { isCompleted: true });
-    if (lower.includes("image capture"))
+
+    if (
+      lower.includes("modem") &&
+      (lower.includes("sim ok") || lower.includes("sim card"))
+    ) {
+      updateStep("modemSim", { isCompleted: true });
+    }
+    
+    // Check for both "connected to internet" and "conncted to internet" (typo in logs)
+    if (
+      lower.includes("connected to internet") ||
+      lower.includes("conncted to internet")
+    ) {
+      updateStep("internet", { isCompleted: true });
+    }
+
+    if (
+      lower.includes("heartbeat") ||
+      lower.includes("keepalive") ||
+      lower.includes("data send")
+    ) {
+      updateStep("heartbeat", { isCompleted: true });
+    }
+
+    if (lower.includes("image capture") || lower.includes("img capture")) {
       updateStep("imgCapture", { isCompleted: true });
-    if (lower.includes("image send"))
+    }
+
+    if (
+      lower.includes("image send") ||
+      lower.includes("image sent") ||
+      lower.includes("img send")
+    ) {
       updateStep("imgSent", { isCompleted: true });
-    if (lower.includes("modem shutdown"))
-      updateStep("modemShutdown", { isCompleted: true });
-    if (lower.includes("sleep")) updateStep("sleep", { isCompleted: true });
+    }
+
+    if (lower.includes("sleep") || lower.includes("going to sleep")) {
+      updateStep("sleep", { isCompleted: true });
+    }
   };
 
   // Get completion stats
@@ -286,46 +263,98 @@ const DeviceMonitor: React.FC = () => {
   const totalSteps = Object.values(steps).length;
   const progressPercentage = Math.round((completedSteps / totalSteps) * 100);
 
-  // -------------------- UI --------------------
-  const StepRow = ({ label, isCompleted, value, color, icon }: StepItem) => (
-    <View style={styles.stepRow}>
-      <View style={styles.stepLeft}>
-        <View
-          style={[
-            styles.iconContainer,
-            {
-              backgroundColor: isCompleted ? "#22c55e15" : "#f3f4f6",
-            },
-          ]}
-        >
-          <MaterialIcons
-            name={
-              (icon as any) ||
-              (isCompleted ? "check-circle" : "radio-button-unchecked")
-            }
-            size={20}
-            color={isCompleted ? "#22c55e" : "#9ca3af"}
-          />
+  // -------------------- UI Components --------------------
+  const StepRow = ({ label, isCompleted, value, color, icon }: StepItem) => {
+    const spinValue = useRef(new Animated.Value(0)).current;
+    const iconScaleValue = useRef(new Animated.Value(0)).current;
+    const checkScaleValue = useRef(new Animated.Value(0)).current;
+
+    useEffect(() => {
+      if (!isCompleted) {
+        // Spinning animation for loader
+        Animated.loop(
+          Animated.timing(spinValue, {
+            toValue: 1,
+            duration: 1000,
+            useNativeDriver: true,
+          })
+        ).start();
+      } else {
+        // Scale animation for icon appearing on the left
+        Animated.spring(iconScaleValue, {
+          toValue: 1,
+          friction: 3,
+          tension: 40,
+          useNativeDriver: true,
+        }).start();
+        
+        // Scale animation for checkmark on the right
+        Animated.spring(checkScaleValue, {
+          toValue: 1,
+          friction: 3,
+          tension: 40,
+          useNativeDriver: true,
+        }).start();
+      }
+    }, [isCompleted]);
+
+    const spin = spinValue.interpolate({
+      inputRange: [0, 1],
+      outputRange: ["0deg", "360deg"],
+    });
+
+    return (
+      <View style={styles.stepRow}>
+        <View style={styles.stepLeft}>
+          <View
+            style={[
+              styles.iconContainer,
+              {
+                backgroundColor: isCompleted ? "#22c55e15" : "#f3f4f6",
+              },
+            ]}
+          >
+            {isCompleted ? (
+              <Animated.View style={{ transform: [{ scale: iconScaleValue }] }}>
+                <MaterialIcons 
+                  name={icon as any} 
+                  size={24} 
+                  color="#22c55e" 
+                />
+              </Animated.View>
+            ) : (
+              <Animated.View style={{ transform: [{ rotate: spin }] }}>
+                <ActivityIndicator size={20} color="#9ca3af" />
+              </Animated.View>
+            )}
+          </View>
+          <View style={styles.stepTextContainer}>
+            <Text
+              style={[
+                styles.stepLabel,
+                {
+                  color: isCompleted ? "#1f2937" : "#6b7280",
+                  fontWeight: isCompleted ? "600" : "400",
+                },
+              ]}
+            >
+              {label}
+            </Text>
+            {value && (
+              <Text style={[styles.stepValue, { color: color || "#3b82f6" }]}>
+                {value}
+              </Text>
+            )}
+          </View>
         </View>
-        <Text
-          style={[
-            styles.stepLabel,
-            {
-              color: isCompleted ? "#1f2937" : "#6b7280",
-              fontWeight: isCompleted ? "600" : "400",
-            },
-          ]}
-        >
-          {label}
-        </Text>
+        {isCompleted && (
+          <Animated.View style={{ transform: [{ scale: checkScaleValue }] }}>
+            <MaterialIcons name="check" size={24} color="#22c55e" />
+          </Animated.View>
+        )}
       </View>
-      {value && (
-        <Text style={[styles.stepValue, { color: color || "#3b82f6" }]}>
-          {value}
-        </Text>
-      )}
-    </View>
-  );
+    );
+  };
 
   const getLogIcon = (type?: LogEntry["type"]) => {
     switch (type) {
@@ -401,7 +430,7 @@ const DeviceMonitor: React.FC = () => {
             size={20}
             color={Theme.colors.primary}
           />
-          <Text style={styles.sectionTitle}>Progress Steps</Text>
+          <Text style={styles.sectionTitle}>Device Progress</Text>
         </View>
         <View style={styles.card}>
           {Object.keys(steps).map((key, index) => (
@@ -419,7 +448,7 @@ const DeviceMonitor: React.FC = () => {
       </ScrollView>
 
       {/* Logs Toggle Button */}
-      <TouchableOpacity
+      {/* <TouchableOpacity
         style={styles.logsToggleButton}
         onPress={() => setShowLogs(!showLogs)}
       >
@@ -434,10 +463,10 @@ const DeviceMonitor: React.FC = () => {
         <View style={styles.logCountBadge}>
           <Text style={styles.logCountText}>{logs.length}</Text>
         </View>
-      </TouchableOpacity>
+      </TouchableOpacity> */}
 
       {/* Expandable Logs Window */}
-      {showLogs && (
+      {/* {showLogs && (
         <View style={styles.logsContainer}>
           <View style={styles.logsHeader}>
             <View style={styles.logsHeaderLeft}>
@@ -488,7 +517,7 @@ const DeviceMonitor: React.FC = () => {
             )}
           </ScrollView>
         </View>
-      )}
+      )} */}
     </View>
   );
 };
@@ -497,35 +526,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#f8fafc",
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: Theme.colors.primary,
-    paddingTop: 15,
-    paddingBottom: 15,
-    paddingHorizontal: 16,
-    elevation: 4,
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  headerCenter: {
-    flex: 1,
-    alignItems: "center",
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#ffffff",
   },
   deviceCard: {
     backgroundColor: "#ffffff",
@@ -636,7 +636,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 12,
+    paddingVertical: 14,
   },
   stepDivider: {
     height: 1,
@@ -649,21 +649,24 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   iconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 12,
+    marginRight: 14,
+  },
+  stepTextContainer: {
+    flex: 1,
   },
   stepLabel: {
-    fontSize: 14,
-    flex: 1,
+    fontSize: 15,
+    marginBottom: 2,
   },
   stepValue: {
     fontWeight: "600",
-    fontSize: 13,
-    marginLeft: 8,
+    fontSize: 12,
+    marginTop: 2,
   },
   logsToggleButton: {
     position: "absolute",
